@@ -43,6 +43,28 @@ def load_fixtures():
         return []
 
 # === FUNKCE ===
+def get_team_difficulty():
+    fixtures = pd.DataFrame(load_fixtures())
+    bootstrap = load_bootstrap_data()
+    if bootstrap and not fixtures.empty:
+        teams = pd.DataFrame(bootstrap['teams'])
+        team_id_to_name = teams.set_index("id")["name"].to_dict()
+        fixtures['team_a'] = fixtures['team_a'].map(team_id_to_name)
+        fixtures['team_h'] = fixtures['team_h'].map(team_id_to_name)
+        fixtures['event'] = fixtures['event'].fillna(0).astype(int)
+        upcoming = fixtures[fixtures['event'].between(6, 10)]
+        matrix = pd.DataFrame(index=team_id_to_name.values(), columns=range(6, 11))
+
+        for _, row in upcoming.iterrows():
+            for team, diff in [(row['team_h'], row['team_h_difficulty']),
+                               (row['team_a'], row['team_a_difficulty'])]:
+                if team in matrix.index:
+                    matrix.at[team, row['event']] = diff
+
+        avg_fdr = matrix.mean(axis=1).to_dict()
+        return avg_fdr
+    return {}
+
 def get_top_players(gw_start=1, gw_end=5):
     bootstrap = load_bootstrap_data()
     if not bootstrap:
@@ -60,17 +82,27 @@ def get_top_players(gw_start=1, gw_end=5):
             pts = entry.get("stats", {}).get("total_points", 0)
             if pid is not None:
                 total_points[pid] = total_points.get(pid, 0) + pts
+
     if players.empty:
         return pd.DataFrame()
+
     players["points_gw1_5"] = players["id"].map(total_points)
     players = players.dropna(subset=["points_gw1_5"])
     players["name"] = players['first_name'] + " " + players['second_name']
     players["team"] = players['team'].map(teams.set_index("id")["name"])
-    players["predicted_gw6"] = players["points_per_game"].astype(float) * 1.05
-    players["predicted_gw7"] = players["points_per_game"].astype(float) * 1.00
-    players["predicted_gw8"] = players["points_per_game"].astype(float) * 0.95
-    players["predicted_gw9"] = players["points_per_game"].astype(float) * 1.10
-    players["predicted_gw10"] = players["points_per_game"].astype(float) * 1.00
+
+    # === PREDIKCE NA DALŠÍ GW S FDR ===
+    avg_fdr = get_team_difficulty()
+    players['avg_fdr'] = players['team'].map(avg_fdr)
+    players['base_points'] = players['points_per_game'].astype(float)
+    players['adjusted'] = players['base_points'] / players['avg_fdr']
+
+    players["predicted_gw6"] = players["adjusted"] * 0.95
+    players["predicted_gw7"] = players["adjusted"] * 1.05
+    players["predicted_gw8"] = players["adjusted"] * 1.00
+    players["predicted_gw9"] = players["adjusted"] * 1.10
+    players["predicted_gw10"] = players["adjusted"] * 1.00
+
     return players.sort_values("points_gw1_5", ascending=False).head(20)[
         ["name", "team", "points_gw1_5", "goals_scored", "assists", "selected_by_percent",
          "predicted_gw6", "predicted_gw7", "predicted_gw8", "predicted_gw9", "predicted_gw10"]
