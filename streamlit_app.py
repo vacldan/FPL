@@ -1,43 +1,4 @@
-# Team performance analysis pro novou sezónu
-        team_stats = []
-        for team_id, team_name in teams_dict.items():
-            team_players = players_df[players_df['team'] == team_name]
-            
-            if not team_players.empty:
-                # Pro novou sezónu se zaměřujeme na potenciál týmu
-                total_value = team_players['price'].sum()  # Celková hodnota týmu
-                avg_prediction = team_players['predicted_points'].mean()  # Průměrná predikce
-                top_player = team_players.loc[team_players['predicted_points'].idxmax()]
-                most_selected = team_players.loc[team_players['selected_by_percent'].idxmax()]
-                
-                team_stats.append({
-                    'team': team_name,
-                    'total_value': total_value,
-                    'avg_prediction': avg_prediction,
-                    'players_count': len(team_players),
-                    'top_player': top_player['name'],
-                    'top_prediction': top_player['predicted_points'],
-                    'most_selected': most_selected['name'],
-                    'highest_selection': most_selected['selected_by_percent']
-                })
-        
-        if team_stats:
-            team_df = pd.DataFrame(team_stats)
-            team_df = team_df.sort_values('avg_prediction', ascending=False)
-            
-            # Top teams by prediction
-            st.subheader("🏆 Nejslibněji vypadající týmy pro sезónu 2025/26")
-            
-            fig = px.bar(
-                team_df.head(10),
-                x='team',
-                y='avg_prediction',
-                title="Průměrná predikce bodů všech hráčů týmu",
-                color='avg_prediction',
-                color_continuous_scale='viridis'
-            )
-            fig.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -96,7 +57,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API funkce pro načítání dat z FPL
-@st.cache_data(ttl=300)  # Cache na 5 minut
+@st.cache_data(ttl=300)
 def fetch_fpl_data():
     """Načte základní data z FPL API"""
     try:
@@ -134,10 +95,9 @@ def process_players_data(fpl_data):
         form_score = float(player['form']) if player['form'] else 0
         
         # Predikce založená na formě a ceně (vyšší cena = vyšší očekávání)
-        price_factor = (player['now_cost'] / 10.0) / 15.0  # Normalizace ceny
-        predicted_points = form_score + (price_factor * 3)  # Bonus za dražší hráče
+        price_factor = (player['now_cost'] / 10.0) / 15.0
+        predicted_points = form_score + (price_factor * 3)
         
-        # Pro začátek sezóny se zaměřujeme na formu z předsezóny a očekávání
         players.append({
             'id': player['id'],
             'name': f"{player['first_name']} {player['second_name']}",
@@ -155,13 +115,12 @@ def process_players_data(fpl_data):
             'chance_of_playing_next_round': player['chance_of_playing_next_round'],
             'transfers_in': player['transfers_in'],
             'transfers_out': player['transfers_out'],
-            'status': player['status'],  # a = available, d = doubtful, i = injured, etc.
-            # Nová sezóna - aktuální statistiky (zatím nulové nebo minimální)
+            'status': player['status'],
             'goals_scored': player['goals_scored'],
             'assists': player['assists'],
             'clean_sheets': player['clean_sheets'],
             'bonus': player['bonus'],
-            'total_points': player['total_points']  # Aktuální body z nové sezóny
+            'total_points': player['total_points']
         })
     
     return pd.DataFrame(players)
@@ -172,16 +131,15 @@ def process_fixtures_data(fixtures_data, teams_dict):
         return pd.DataFrame()
     
     fixtures = []
-    for fixture in fixtures_data[:20]:  # Prvních 20 zápasů
+    for fixture in fixtures_data[:20]:
         if fixture['finished']:
-            continue  # Přeskočíme dokončené zápasy
+            continue
             
         home_team = teams_dict.get(fixture['team_h'], 'Unknown')
         away_team = teams_dict.get(fixture['team_a'], 'Unknown')
         
-        # Výpočet obtížnosti na základě síly týmů
         home_difficulty = fixture['team_h_difficulty']
-        away_difficulty = fixture['team_a_difficulty']
+        away_difficulty = fixture['team_a_difficulty']  
         avg_difficulty = (home_difficulty + away_difficulty) / 2
         
         fixtures.append({
@@ -217,7 +175,6 @@ def get_current_gameweek(fpl_data):
     
     return current_gw
 
-# Pomocné funkce
 def get_position_color(position):
     colors = {
         'Goalkeeper': '#eab308',
@@ -241,7 +198,6 @@ def format_price(price):
     """Formátuje cenu hráče"""
     return f"£{price:.1f}m"
 
-# Hlavní aplikace
 def main():
     # Header s live indikátorem
     st.markdown("""
@@ -320,8 +276,6 @@ def main():
             filtered_df = filtered_df[filtered_df['position'] == position_filter]
         
         filtered_df = filtered_df[filtered_df['price'] <= max_price]
-        
-        # Seřazení podle predikovaných bodů
         filtered_df = filtered_df.sort_values('predicted_points', ascending=False)
 
         # Zobrazení top hráčů
@@ -329,24 +283,21 @@ def main():
         
         for idx, (_, player) in enumerate(filtered_df.head(20).iterrows()):
             with st.container():
-                # Main player info
                 col1, col2, col3, col4, col5, col6 = st.columns([3, 1, 1, 1, 1, 1])
                 
                 with col1:
-                    # News indicator pro zranění/důležité zprávy
                     news_indicator = "🚨" if player['news'] else ""
                     injury_risk = ""
                     if player['chance_of_playing_this_round'] and player['chance_of_playing_this_round'] < 100:
                         injury_risk = f" ⚠️ {player['chance_of_playing_this_round']}%"
                     
-                    # Status indicator
                     status_icon = ""
                     if player['status'] == 'd':
-                        status_icon = " 🤕"  # Doubtful
+                        status_icon = " 🤕"
                     elif player['status'] == 'i':
-                        status_icon = " 🚑"  # Injured
+                        status_icon = " 🚑"
                     elif player['status'] == 's':
-                        status_icon = " ⛔"  # Suspended
+                        status_icon = " ⛔"
                     
                     st.markdown(f"""
                     <div style='background: linear-gradient(135deg, {get_position_color(player['position'])}22 0%, {get_position_color(player['position'])}44 100%); 
@@ -366,16 +317,9 @@ def main():
                 with col5:
                     st.metric("Vlastnictví", f"{player['selected_by_percent']:.1f}%")
                 with col6:
-                    # Pro novou sezónu zobrazujeme transfery místo celkových bodů
                     net_transfers = player['transfers_in'] - player['transfers_out']
-                    delta_color = "normal"
-                    if net_transfers > 10000:
-                        delta_color = "normal"
-                    elif net_transfers < -10000:
-                        delta_color = "inverse"
-                    st.metric("Transfer trend", f"{net_transfers:,}", delta=f"NET")
+                    st.metric("Transfer trend", f"{net_transfers:,}")
 
-                # Aktuální sezóna statistiky (zatím minimální)
                 if player['total_points'] > 0 or player['goals_scored'] > 0 or player['assists'] > 0:
                     col7, col8, col9, col10 = st.columns(4)
                     with col7:
@@ -395,7 +339,6 @@ def main():
         if not filtered_df.empty:
             st.subheader("📊 Analýza hodnoty za peníze - Start sezóny 2025/26")
             
-            # Value per million calculation based on prediction and price
             filtered_df['value_per_million'] = filtered_df['predicted_points'] / filtered_df['price']
             top_value = filtered_df.nlargest(15, 'value_per_million')
             
@@ -422,7 +365,6 @@ def main():
         st.header("💰 Nejlepší value za peníze - Nový start!")
         st.markdown("Založeno na ceně, formě a transferové aktivitě pro sezónu 2025/26")
         
-        # Value categories
         price_ranges = [
             ("Budget (£3.5-5.5m)", 3.5, 5.5),
             ("Mid-range (£5.5-8.0m)", 5.5, 8.0),
@@ -439,11 +381,10 @@ def main():
             ].copy()
             
             if not category_players.empty:
-                # Value calculation pro novou sezónu - založeno na predikci a low ownership
                 category_players['value_score'] = (
                     category_players['predicted_points'] * 0.5 +
                     category_players['form'] * 0.3 +
-                    (100 - category_players['selected_by_percent']) / 100 * 0.2  # Bonus za low ownership
+                    (100 - category_players['selected_by_percent']) / 100 * 0.2
                 )
                 
                 top_category = category_players.nlargest(5, 'value_score')
@@ -477,7 +418,6 @@ def main():
             st.warning("Data o zápasech nejsou k dispozici.")
             return
         
-        # Current gameweek fixtures
         current_fixtures = fixtures_df[fixtures_df['gameweek'] == current_gw]
         
         if not current_fixtures.empty:
@@ -521,7 +461,6 @@ def main():
         st.subheader("📊 Obtížnost fixtures podle týmů")
         
         if not fixtures_df.empty:
-            # Calculate average difficulty for each team
             team_difficulty = []
             next_5_fixtures = fixtures_df[fixtures_df['gameweek'].between(current_gw, current_gw + 4)]
             
@@ -565,7 +504,6 @@ def main():
     elif selected_tab == "Transfer trendy":
         st.header("🔄 Transfer trendy a vlastnictví")
         
-        # Most transferred in/out
         col1, col2 = st.columns(2)
         
         with col1:
@@ -573,7 +511,6 @@ def main():
             most_transferred_in = players_df.nlargest(10, 'transfers_in')
             
             for _, player in most_transferred_in.iterrows():
-                delta_color = "normal"
                 st.metric(
                     f"{player['name']} ({player['team']})",
                     f"{player['transfers_in']:,}",
@@ -591,10 +528,9 @@ def main():
                     delta=f"£{player['price']:.1f}m"
                 )
 
-        # Transfer trends visualization
+        # Transfer trends visualization  
         st.subheader("📊 Transfer aktivita")
         
-        # Get players with significant transfer activity
         active_transfers = players_df[
             (players_df['transfers_in'] > 50000) | (players_df['transfers_out'] > 50000)
         ].copy()
@@ -622,15 +558,13 @@ def main():
     elif selected_tab == "Týmová analýza":
         st.header("🏟️ Analýza podle týmů")
         
-        # Team performance analysis pro novou sezónu
         team_stats = []
         for team_id, team_name in teams_dict.items():
             team_players = players_df[players_df['team'] == team_name]
             
             if not team_players.empty:
-                # Pro novou sezónu se zaměřujeme na potenciál týmu
-                total_value = team_players['price'].sum()  # Celková hodnota týmu
-                avg_prediction = team_players['predicted_points'].mean()  # Průměrná predikce
+                total_value = team_players['price'].sum()
+                avg_prediction = team_players['predicted_points'].mean()
                 top_player = team_players.loc[team_players['predicted_points'].idxmax()]
                 most_selected = team_players.loc[team_players['selected_by_percent'].idxmax()]
                 
@@ -649,7 +583,6 @@ def main():
             team_df = pd.DataFrame(team_stats)
             team_df = team_df.sort_values('avg_prediction', ascending=False)
             
-            # Top teams by prediction
             st.subheader("🏆 Nejslibněji vypadající týmy pro sezónu 2025/26")
             
             fig = px.bar(
@@ -668,7 +601,6 @@ def main():
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Team details table
             st.subheader("📋 Detaily týmů - Potenciál pro novou sezónu")
             
             display_df = team_df[['team', 'avg_prediction', 'total_value', 'top_player', 'top_prediction', 'most_selected', 'highest_selection']].copy()
