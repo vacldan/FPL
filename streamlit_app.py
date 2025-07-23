@@ -1,4 +1,4 @@
-# streamlit_app.py – FPL AI Asistent
+# streamlit_app.py – FPL AI Asistent (opravená verze)
 import requests
 import pandas as pd
 import streamlit as st
@@ -8,12 +8,14 @@ from datetime import datetime
 
 st.set_page_config(page_title="FPL AI Asistent", layout="wide")
 
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FPL-AI/1.0)"}
+
 # === API načítání ===
 @st.cache_data
 def load_bootstrap_data():
     url = "https://fantasy.premierleague.com/api/bootstrap-static/"
     try:
-        res = requests.get(url)
+        res = requests.get(url, headers=HEADERS)
         res.raise_for_status()
         return res.json()
     except Exception as e:
@@ -24,7 +26,7 @@ def load_bootstrap_data():
 def load_event_data(event_id):
     url = f"https://fantasy.premierleague.com/api/event/{event_id}/live/"
     try:
-        res = requests.get(url)
+        res = requests.get(url, headers=HEADERS)
         res.raise_for_status()
         return res.json()
     except Exception as e:
@@ -35,7 +37,7 @@ def load_event_data(event_id):
 def load_fixtures():
     url = "https://fantasy.premierleague.com/api/fixtures/"
     try:
-        res = requests.get(url)
+        res = requests.get(url, headers=HEADERS)
         res.raise_for_status()
         return res.json()
     except Exception as e:
@@ -44,9 +46,8 @@ def load_fixtures():
 
 @st.cache_data
 def load_current_gw():
-    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
     try:
-        res = requests.get(url)
+        res = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", headers=HEADERS)
         res.raise_for_status()
         events = res.json().get("events", [])
         for e in events:
@@ -162,9 +163,9 @@ with tabs[2]:
             cols = st.columns(len(players))
             for i, player in enumerate(players):
                 with cols[i]:
-                    st.markdown(f"**{player['name']}**")
-                    st.markdown(f":shirt: `{player['team']}`")
-                    st.markdown(f"📅 GW body: {player['predicted_total']:.1f}")
+                    st.markdown(f"**{player.name}**")
+                    st.markdown(f":shirt: `{player.team}`")
+                    st.markdown(f"📅 GW body: {player.predicted_total:.1f}")
 
         gk = top_team.iloc[0]
         defs = top_team.iloc[1:4]
