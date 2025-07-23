@@ -29,7 +29,7 @@ def load_event_data(event_id):
         return res.json()
     except Exception as e:
         st.warning(f"⚠️ Chyba při načítání GW{event_id}: {e}")
-        return {"elements": {}}
+        return {"elements": []}
 
 @st.cache_data
 def load_fixtures():
@@ -54,10 +54,11 @@ def get_top_players(gw_start=1, gw_end=5):
         data = load_event_data(gw)
         if not data or "elements" not in data:
             continue
-        for p_id, entry in data["elements"].items():
-            pid = int(p_id)
+        for entry in data["elements"]:
+            pid = entry.get("id")
             pts = entry.get("stats", {}).get("total_points", 0)
-            total_points[pid] = total_points.get(pid, 0) + pts
+            if pid is not None:
+                total_points[pid] = total_points.get(pid, 0) + pts
     if players.empty:
         return pd.DataFrame()
     players["points_gw1_5"] = players["id"].map(total_points)
