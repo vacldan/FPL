@@ -52,7 +52,8 @@ def get_top_players(gw_start=1, gw_end=5):
     total_points = {}
     for gw in range(gw_start, gw_end + 1):
         data = load_event_data(gw)
-        if not data or "elements" not in data:
+        if not data or "elements" not in data or not data["elements"]:
+            st.warning(f"⚠️ Data z GW{gw} nejsou dostupná nebo jsou prázdná.")
             continue
         for entry in data["elements"]:
             pid = entry.get("id")
