@@ -66,8 +66,14 @@ def get_top_players(gw_start=1, gw_end=5):
     players = players.dropna(subset=["points_gw1_5"])
     players["name"] = players['first_name'] + " " + players['second_name']
     players["team"] = players['team'].map(teams.set_index("id")["name"])
+    players["predicted_gw6"] = players["points_per_game"].astype(float) * 1.05
+    players["predicted_gw7"] = players["points_per_game"].astype(float) * 1.00
+    players["predicted_gw8"] = players["points_per_game"].astype(float) * 0.95
+    players["predicted_gw9"] = players["points_per_game"].astype(float) * 1.10
+    players["predicted_gw10"] = players["points_per_game"].astype(float) * 1.00
     return players.sort_values("points_gw1_5", ascending=False).head(20)[
-        ["name", "team", "points_gw1_5", "goals_scored", "assists", "selected_by_percent"]
+        ["name", "team", "points_gw1_5", "goals_scored", "assists", "selected_by_percent",
+         "predicted_gw6", "predicted_gw7", "predicted_gw8", "predicted_gw9", "predicted_gw10"]
     ]
 
 # === UI ===
