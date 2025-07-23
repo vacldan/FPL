@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import requests
+import json
+from datetime import datetime
 
 # Konfigurace stránky
 st.set_page_config(
-    page_title="FPL Predictor",
+    page_title="FPL Predictor - Live Data",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -42,178 +44,145 @@ st.markdown("""
         border-radius: 15px;
         margin: 1rem 0;
     }
+    .live-indicator {
+        background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: bold;
+        display: inline-block;
+        margin: 0.5rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Data - kopie z původního React kódu
-@st.cache_data
-def load_players_data():
-    players = [
-        {
-            "id": 1,
-            "name": "Mohamed Salah",
-            "team": "Liverpool",
-            "position": "Midfielder",
-            "price": 14.5,
-            "total_points": 344,
-            "form": 9.1,
-            "selected_by_percent": 63.4,
-            "predicted_points": 13.8,
-            "next5fixtures": [
-                {"points": 9.2, "opponent": "BOU", "isHome": True, "gw": 1},
-                {"points": 12.8, "opponent": "new", "isHome": False, "gw": 2},
-                {"points": 8.1, "opponent": "ARS", "isHome": True, "gw": 3},
-                {"points": 10.5, "opponent": "bur", "isHome": False, "gw": 4},
-                {"points": 12.1, "opponent": "EVE", "isHome": True, "gw": 5}
-            ]
-        },
-        {
-            "id": 2,
-            "name": "Erling Haaland",
-            "team": "Man City",
-            "position": "Forward",
-            "price": 14.0,
-            "total_points": 181,
-            "form": 7.3,
-            "selected_by_percent": 45.8,
-            "predicted_points": 11.2,
-            "next5fixtures": [
-                {"points": 5.8, "opponent": "wol", "isHome": False, "gw": 1},
-                {"points": 11.5, "opponent": "TOT", "isHome": True, "gw": 2},
-                {"points": 13.8, "opponent": "bri", "isHome": False, "gw": 3},
-                {"points": 9.2, "opponent": "MUN", "isHome": True, "gw": 4},
-                {"points": 11.8, "opponent": "ARS", "isHome": False, "gw": 5}
-            ]
-        },
-        {
-            "id": 3,
-            "name": "Alexander Isak",
-            "team": "Newcastle",
-            "position": "Forward",
-            "price": 10.5,
-            "total_points": 211,
-            "form": 8.6,
-            "selected_by_percent": 38.2,
-            "predicted_points": 12.8,
-            "next5fixtures": [
-                {"points": 10.1, "opponent": "AVL", "isHome": False, "gw": 1},
-                {"points": 9.2, "opponent": "LIV", "isHome": True, "gw": 2},
-                {"points": 12.1, "opponent": "lee", "isHome": False, "gw": 3},
-                {"points": 8.3, "opponent": "WOL", "isHome": True, "gw": 4},
-                {"points": 11.2, "opponent": "bou", "isHome": False, "gw": 5}
-            ]
-        },
-        {
-            "id": 4,
-            "name": "Cole Palmer",
-            "team": "Chelsea",
-            "position": "Midfielder",
-            "price": 10.5,
-            "total_points": 198,
-            "form": 7.9,
-            "selected_by_percent": 32.7,
-            "predicted_points": 10.1,
-            "next5fixtures": [
-                {"points": 8.8, "opponent": "CRY", "isHome": True, "gw": 1},
-                {"points": 9.9, "opponent": "whu", "isHome": False, "gw": 2},
-                {"points": 7.2, "opponent": "FUL", "isHome": True, "gw": 3},
-                {"points": 11.8, "opponent": "BRE", "isHome": False, "gw": 4},
-                {"points": 9.5, "opponent": "mun", "isHome": False, "gw": 5}
-            ]
-        },
-        {
-            "id": 5,
-            "name": "Bukayo Saka",
-            "team": "Arsenal",
-            "position": "Midfielder",
-            "price": 10.0,
-            "total_points": 165,
-            "form": 7.2,
-            "selected_by_percent": 29.8,
-            "predicted_points": 9.5,
-            "next5fixtures": [
-                {"points": 9.8, "opponent": "mun", "isHome": False, "gw": 1},
-                {"points": 8.1, "opponent": "BRI", "isHome": True, "gw": 2},
-                {"points": 8.9, "opponent": "liv", "isHome": False, "gw": 3},
-                {"points": 7.2, "opponent": "NFO", "isHome": False, "gw": 4},
-                {"points": 11.8, "opponent": "MCI", "isHome": True, "gw": 5}
-            ]
-        },
-        {
-            "id": 6,
-            "name": "Florian Wirtz",
-            "team": "Liverpool",
-            "position": "Midfielder",
-            "price": 8.5,
-            "total_points": 0,
-            "form": 8.0,
-            "selected_by_percent": 15.3,
-            "predicted_points": 8.8,
-            "next5fixtures": [
-                {"points": 7.5, "opponent": "BOU", "isHome": True, "gw": 1},
-                {"points": 9.8, "opponent": "new", "isHome": False, "gw": 2},
-                {"points": 6.5, "opponent": "ARS", "isHome": True, "gw": 3},
-                {"points": 9.2, "opponent": "bur", "isHome": False, "gw": 4},
-                {"points": 10.1, "opponent": "EVE", "isHome": True, "gw": 5}
-            ]
-        },
-        {
-            "id": 7,
-            "name": "Bryan Mbeumo",
-            "team": "Brentford",
-            "position": "Midfielder",
-            "price": 8.0,
-            "total_points": 234,
-            "form": 8.4,
-            "selected_by_percent": 42.1,
-            "predicted_points": 9.8,
-            "next5fixtures": [
-                {"points": 8.8, "opponent": "nfo", "isHome": False, "gw": 1},
-                {"points": 7.9, "opponent": "AVL", "isHome": False, "gw": 2},
-                {"points": 10.5, "opponent": "SUN", "isHome": True, "gw": 3},
-                {"points": 7.1, "opponent": "CHE", "isHome": True, "gw": 4},
-                {"points": 9.2, "opponent": "FUL", "isHome": False, "gw": 5}
-            ]
-        },
-        {
-            "id": 8,
-            "name": "Jarrod Bowen",
-            "team": "West Ham",
-            "position": "Forward",
-            "price": 8.0,
-            "total_points": 156,
-            "form": 7.5,
-            "selected_by_percent": 18.9,
-            "predicted_points": 8.1,
-            "next5fixtures": [
-                {"points": 7.8, "opponent": "sun", "isHome": False, "gw": 1},
-                {"points": 8.5, "opponent": "CHE", "isHome": True, "gw": 2},
-                {"points": 6.9, "opponent": "nfo", "isHome": False, "gw": 3},
-                {"points": 9.2, "opponent": "TOT", "isHome": False, "gw": 4},
-                {"points": 7.4, "opponent": "cry", "isHome": False, "gw": 5}
-            ]
-        }
-    ]
+# API funkce pro načítání dat z FPL
+@st.cache_data(ttl=300)  # Cache na 5 minut
+def fetch_fpl_data():
+    """Načte základní data z FPL API"""
+    try:
+        base_url = "https://fantasy.premierleague.com/api/"
+        response = requests.get(f"{base_url}bootstrap-static/", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Chyba při načítání dat z FPL API: {e}")
+        return None
+
+@st.cache_data(ttl=300)
+def fetch_fixtures_data():
+    """Načte data o zápasech"""
+    try:
+        base_url = "https://fantasy.premierleague.com/api/"
+        response = requests.get(f"{base_url}fixtures/", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Chyba při načítání fixtures z FPL API: {e}")
+        return None
+
+def process_players_data(fpl_data):
+    """Zpracuje data hráčů z FPL API"""
+    if not fpl_data:
+        return pd.DataFrame()
+    
+    players = []
+    teams = {team['id']: team['name'] for team in fpl_data['teams']}
+    positions = {pos['id']: pos['singular_name'] for pos in fpl_data['element_types']}
+    
+    for player in fpl_data['elements']:
+        # Výpočet predikovaných bodů na základě formy a průměru
+        form_score = float(player['form']) if player['form'] else 0
+        avg_points = float(player['points_per_game']) if player['points_per_game'] else 0
+        predicted_points = (form_score * 0.6 + avg_points * 0.4)
+        
+        players.append({
+            'id': player['id'],
+            'name': f"{player['first_name']} {player['second_name']}",
+            'web_name': player['web_name'],
+            'team': teams.get(player['team'], 'Unknown'),
+            'team_code': player['team_code'],
+            'position': positions.get(player['element_type'], 'Unknown'),
+            'price': player['now_cost'] / 10.0,  # Cena je v desetinách
+            'total_points': player['total_points'],
+            'form': form_score,
+            'selected_by_percent': float(player['selected_by_percent']),
+            'predicted_points': predicted_points,
+            'points_per_game': avg_points,
+            'goals_scored': player['goals_scored'],
+            'assists': player['assists'],
+            'clean_sheets': player['clean_sheets'],
+            'minutes': player['minutes'],
+            'bonus': player['bonus'],
+            'value_form': float(player['value_form']) if player['value_form'] else 0,
+            'value_season': float(player['value_season']) if player['value_season'] else 0,
+            'transfers_in': player['transfers_in'],
+            'transfers_out': player['transfers_out'],
+            'news': player['news'] if player['news'] else '',
+            'chance_of_playing_this_round': player['chance_of_playing_this_round'],
+            'chance_of_playing_next_round': player['chance_of_playing_next_round']
+        })
+    
     return pd.DataFrame(players)
 
-@st.cache_data
-def load_fixtures_data():
-    fixtures = [
-        {"id": 1, "home_team": "Liverpool", "away_team": "Bournemouth", "difficulty": 2, "gameweek": 1, "date": "15 Aug"},
-        {"id": 2, "home_team": "Aston Villa", "away_team": "Newcastle", "difficulty": 3, "gameweek": 1, "date": "16 Aug"},
-        {"id": 3, "home_team": "Chelsea", "away_team": "Crystal Palace", "difficulty": 2, "gameweek": 1, "date": "17 Aug"},
-        {"id": 4, "home_team": "Man United", "away_team": "Arsenal", "difficulty": 4, "gameweek": 1, "date": "17 Aug"},
-        {"id": 5, "home_team": "Tottenham", "away_team": "Burnley", "difficulty": 2, "gameweek": 1, "date": "16 Aug"}
-    ]
+def process_fixtures_data(fixtures_data, teams_dict):
+    """Zpracuje data o zápasech"""
+    if not fixtures_data:
+        return pd.DataFrame()
+    
+    fixtures = []
+    for fixture in fixtures_data[:20]:  # Prvních 20 zápasů
+        if fixture['finished']:
+            continue  # Přeskočíme dokončené zápasy
+            
+        home_team = teams_dict.get(fixture['team_h'], 'Unknown')
+        away_team = teams_dict.get(fixture['team_a'], 'Unknown')
+        
+        # Výpočet obtížnosti na základě síly týmů
+        home_difficulty = fixture['team_h_difficulty']
+        away_difficulty = fixture['team_a_difficulty']
+        avg_difficulty = (home_difficulty + away_difficulty) / 2
+        
+        fixtures.append({
+            'id': fixture['id'],
+            'gameweek': fixture['event'],
+            'home_team': home_team,
+            'away_team': away_team,
+            'home_team_id': fixture['team_h'],
+            'away_team_id': fixture['team_a'],
+            'difficulty': round(avg_difficulty),
+            'home_difficulty': home_difficulty,
+            'away_difficulty': away_difficulty,
+            'kickoff_time': fixture['kickoff_time'],
+            'finished': fixture['finished'],
+            'started': fixture['started']
+        })
+    
     return pd.DataFrame(fixtures)
+
+def get_current_gameweek(fpl_data):
+    """Najde aktuální gameweek"""
+    if not fpl_data:
+        return 1
+    
+    current_gw = 1
+    for event in fpl_data['events']:
+        if event['is_current']:
+            current_gw = event['id']
+            break
+        elif event['is_next']:
+            current_gw = event['id']
+            break
+    
+    return current_gw
 
 # Pomocné funkce
 def get_position_color(position):
     colors = {
-        'Forward': '#ef4444',
-        'Midfielder': '#22c55e', 
-        'Defender': '#3b82f6',
-        'Goalkeeper': '#eab308'
+        'Goalkeeper': '#eab308',
+        'Defender': '#3b82f6', 
+        'Midfielder': '#22c55e',
+        'Forward': '#ef4444'
     }
     return colors.get(position, '#6b7280')
 
@@ -227,34 +196,65 @@ def get_difficulty_color(difficulty):
     else:
         return '#ef4444'
 
+def format_price(price):
+    """Formátuje cenu hráče"""
+    return f"£{price:.1f}m"
+
 # Hlavní aplikace
 def main():
-    # Header
+    # Header s live indikátorem
     st.markdown("""
     <div style='background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 10px; margin-bottom: 2rem;'>
         <h1 style='color: white; text-align: center; margin: 0;'>⚽ FPL Predictor</h1>
-        <p style='color: #e2e8f0; text-align: center; margin: 0.5rem 0 0 0;'>Gameweek 1 • Sezóna 2025/26</p>
+        <p style='color: #e2e8f0; text-align: center; margin: 0.5rem 0 0 0;'>Live data ze seasonky 2024/25</p>
+        <div style='text-align: center;'>
+            <span class='live-indicator'>🔴 LIVE DATA</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     # Načtení dat
-    players_df = load_players_data()
-    fixtures_df = load_fixtures_data()
+    with st.spinner('Načítám aktuální data z FPL API...'):
+        fpl_data = fetch_fpl_data()
+        fixtures_raw = fetch_fixtures_data()
+        
+    if not fpl_data:
+        st.error("Nepodařilo se načíst data z FPL API. Zkuste to později.")
+        return
+    
+    # Zpracování dat
+    players_df = process_players_data(fpl_data)
+    teams_dict = {team['id']: team['name'] for team in fpl_data['teams']}
+    fixtures_df = process_fixtures_data(fixtures_raw, teams_dict) if fixtures_raw else pd.DataFrame()
+    current_gw = get_current_gameweek(fpl_data)
+    
+    # Info panel s aktuálními statistikami
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Aktuální GW", current_gw)
+    with col2:
+        st.metric("Celkem hráčů", len(players_df))
+    with col3:
+        avg_price = players_df['price'].mean()
+        st.metric("Průměrná cena", f"£{avg_price:.1f}m")
+    with col4:
+        last_update = datetime.now().strftime("%H:%M")
+        st.metric("Poslední update", last_update)
 
     # Sidebar s navigací
     st.sidebar.title("📊 Navigace")
     selected_tab = st.sidebar.selectbox(
         "Vyberte sekci:",
-        ["Predikce bodů", "Můj doporučený tým", "Fixture analýza", "Doporučení kapitána", "Transfer tips"]
+        ["Predikce bodů", "Top hráči podle ceny", "Fixture analýza", "Transfer trendy", "Týmová analýza"]
     )
 
     # Tab: Predikce bodů
     if selected_tab == "Predikce bodů":
-        st.header("🎯 Top predikce na Gameweek 1")
-        st.markdown("Hráči s nejvyšší predikovanými body pro start sezóny 2025/26")
+        st.header("🎯 Nejlepší hráči podle predikce")
+        st.markdown(f"**Gameweek {current_gw}** - Seřazeno podle formy a průměru bodů")
 
         # Filtry
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             search_term = st.text_input("🔍 Hledat hráče:", placeholder="Zadejte jméno hráče...")
         with col2:
@@ -262,401 +262,360 @@ def main():
                 "Pozice:",
                 ["Všechny pozice", "Goalkeeper", "Defender", "Midfielder", "Forward"]
             )
+        with col3:
+            max_price = st.number_input("Max cena (£m):", min_value=3.0, max_value=15.0, value=15.0, step=0.5)
 
         # Filtrování dat
         filtered_df = players_df.copy()
         if search_term:
-            filtered_df = filtered_df[filtered_df['name'].str.contains(search_term, case=False)]
+            filtered_df = filtered_df[
+                filtered_df['name'].str.contains(search_term, case=False) | 
+                filtered_df['web_name'].str.contains(search_term, case=False)
+            ]
         if position_filter != "Všechny pozice":
             filtered_df = filtered_df[filtered_df['position'] == position_filter]
-
+        
+        filtered_df = filtered_df[filtered_df['price'] <= max_price]
+        
         # Seřazení podle predikovaných bodů
         filtered_df = filtered_df.sort_values('predicted_points', ascending=False)
 
         # Zobrazení top hráčů
-        for idx, player in filtered_df.iterrows():
+        st.subheader(f"📈 Top {min(20, len(filtered_df))} hráčů")
+        
+        for idx, (_, player) in enumerate(filtered_df.head(20).iterrows()):
             with st.container():
+                # Main player info
                 col1, col2, col3, col4, col5, col6 = st.columns([3, 1, 1, 1, 1, 1])
                 
                 with col1:
+                    # News indicator
+                    news_indicator = "🚨" if player['news'] else ""
+                    injury_risk = ""
+                    if player['chance_of_playing_this_round'] and player['chance_of_playing_this_round'] < 100:
+                        injury_risk = f" ⚠️ {player['chance_of_playing_this_round']}%"
+                    
                     st.markdown(f"""
                     <div style='background: linear-gradient(135deg, {get_position_color(player['position'])}22 0%, {get_position_color(player['position'])}44 100%); 
                                 padding: 1rem; border-radius: 8px; border-left: 4px solid {get_position_color(player['position'])};'>
-                        <h4 style='margin: 0; color: white;'>{player['name']}</h4>
+                        <h4 style='margin: 0; color: white;'>{news_indicator} {player['name']} {injury_risk}</h4>
                         <p style='margin: 0; color: #cbd5e1;'>{player['team']} • {player['position']}</p>
+                        {f"<small style='color: #fbbf24;'>📰 {player['news']}</small>" if player['news'] else ""}
                     </div>
                     """, unsafe_allow_html=True)
 
                 with col2:
-                    st.metric("Predikce", f"{player['predicted_points']:.1f}")
+                    st.metric("Predikovaná forma", f"{player['predicted_points']:.1f}")
                 with col3:
-                    st.metric("Forma", f"{player['form']:.1f}")
+                    st.metric("Aktuální forma", f"{player['form']:.1f}")
                 with col4:
-                    st.metric("Cena", f"£{player['price']}m")
+                    st.metric("Cena", format_price(player['price']))
                 with col5:
-                    st.metric("Vlastnictví", f"{player['selected_by_percent']}%")
+                    st.metric("Vlastnictví", f"{player['selected_by_percent']:.1f}%")
                 with col6:
-                    st.metric("Celkem", f"{player['total_points']}")
+                    st.metric("Celkem bodů", f"{player['total_points']}")
 
-                # Fixtures prediction chart
-                fixtures = player['next5fixtures']
-                fixture_data = pd.DataFrame(fixtures)
+                # Detailed stats
+                col7, col8, col9, col10 = st.columns(4)
+                with col7:
+                    st.caption(f"⚽ Góly: {player['goals_scored']}")
+                with col8:
+                    st.caption(f"🎯 Asistence: {player['assists']}")
+                with col9:
+                    st.caption(f"🛡️ Clean sheets: {player['clean_sheets']}")
+                with col10:
+                    st.caption(f"⏱️ Minuty: {player['minutes']}")
+                
+                st.divider()
+
+        # Value analysis chart
+        if not filtered_df.empty:
+            st.subheader("📊 Analýza hodnoty za peníze")
+            
+            # Value per million calculation
+            filtered_df['value_per_million'] = filtered_df['predicted_points'] / filtered_df['price']
+            top_value = filtered_df.nlargest(15, 'value_per_million')
+            
+            fig = px.scatter(
+                top_value,
+                x='price',
+                y='predicted_points',
+                size='selected_by_percent',
+                color='position',
+                hover_name='name',
+                hover_data={'team': True, 'total_points': True},
+                title="Cena vs Predikované body (velikost = vlastnictví %)",
+                labels={'price': 'Cena (£m)', 'predicted_points': 'Predikované body'}
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    # Tab: Top hráči podle ceny
+    elif selected_tab == "Top hráči podle ceny":
+        st.header("💰 Nejlepší value za peníze")
+        
+        # Value categories
+        price_ranges = [
+            ("Budget (£3.5-5.5m)", 3.5, 5.5),
+            ("Mid-range (£5.5-8.0m)", 5.5, 8.0),
+            ("Premium (£8.0-12.0m)", 8.0, 12.0),
+            ("Super premium (£12.0+)", 12.0, 20.0)
+        ]
+        
+        for category, min_price, max_price in price_ranges:
+            st.subheader(category)
+            
+            category_players = players_df[
+                (players_df['price'] >= min_price) & 
+                (players_df['price'] < max_price) &
+                (players_df['minutes'] > 500)  # Jen hráči s dostatečnými minutami
+            ].copy()
+            
+            if not category_players.empty:
+                # Value calculation
+                category_players['value_score'] = (
+                    category_players['predicted_points'] * 0.4 +
+                    category_players['total_points'] / 10 * 0.3 +
+                    (100 - category_players['selected_by_percent']) / 100 * 0.3  # Bonus za low ownership
+                )
+                
+                top_category = category_players.nlargest(5, 'value_score')
+                
+                for _, player in top_category.iterrows():
+                    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"""
+                        <div style='background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+                                    padding: 0.8rem; border-radius: 8px; color: white;'>
+                            <strong>{player['name']}</strong><br>
+                            <small>{player['team']} • {player['position']}</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.metric("Cena", format_price(player['price']))
+                    with col3:
+                        st.metric("Body/zápas", f"{player['points_per_game']:.1f}")
+                    with col4:
+                        st.metric("Vlastnictví", f"{player['selected_by_percent']:.1f}%")
+            else:
+                st.info("Žádní hráči v této kategorii s dostatečnými minutami.")
+
+    # Tab: Fixture analýza
+    elif selected_tab == "Fixture analýza":
+        st.header("📅 Analýza nadcházejících zápasů")
+        
+        if fixtures_df.empty:
+            st.warning("Data o zápasech nejsou k dispozici.")
+            return
+        
+        # Current gameweek fixtures
+        current_fixtures = fixtures_df[fixtures_df['gameweek'] == current_gw]
+        
+        if not current_fixtures.empty:
+            st.subheader(f"⚽ Zápasy Gameweek {current_gw}")
+            
+            for _, fixture in current_fixtures.iterrows():
+                col1, col2, col3 = st.columns([3, 1, 1])
+                
+                difficulty_color = get_difficulty_color(fixture['difficulty'])
+                
+                with col1:
+                    kickoff = fixture['kickoff_time']
+                    if kickoff:
+                        kickoff_time = datetime.fromisoformat(kickoff.replace('Z', '+00:00')).strftime('%d.%m %H:%M')
+                    else:
+                        kickoff_time = "TBD"
+                    
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
+                                padding: 1rem; border-radius: 8px; border-left: 4px solid {difficulty_color};'>
+                        <h4 style='color: white; margin: 0;'>{fixture['home_team']} vs {fixture['away_team']}</h4>
+                        <p style='color: #cbd5e1; margin: 0.5rem 0 0 0;'>
+                            {kickoff_time} • Obtížnost: {fixture['difficulty']}/5
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    if fixture['difficulty'] <= 2:
+                        st.success("✅ Snadný")
+                    elif fixture['difficulty'] >= 4:
+                        st.error("❌ Těžký")
+                    else:
+                        st.info("➖ Střední")
+                
+                with col3:
+                    st.caption(f"🏠 Doma: {fixture['home_difficulty']}")
+                    st.caption(f"✈️ Venku: {fixture['away_difficulty']}")
+
+        # Team fixture difficulty
+        st.subheader("📊 Obtížnost fixtures podle týmů")
+        
+        if not fixtures_df.empty:
+            # Calculate average difficulty for each team
+            team_difficulty = []
+            next_5_fixtures = fixtures_df[fixtures_df['gameweek'].between(current_gw, current_gw + 4)]
+            
+            for team_id, team_name in teams_dict.items():
+                home_fixtures = next_5_fixtures[next_5_fixtures['home_team_id'] == team_id]
+                away_fixtures = next_5_fixtures[next_5_fixtures['away_team_id'] == team_id]
+                
+                home_diff = home_fixtures['home_difficulty'].mean() if not home_fixtures.empty else 0
+                away_diff = away_fixtures['away_difficulty'].mean() if not away_fixtures.empty else 0
+                
+                avg_difficulty = (home_diff + away_diff) / 2 if (home_diff > 0 or away_diff > 0) else 0
+                
+                if avg_difficulty > 0:
+                    team_difficulty.append({
+                        'team': team_name,
+                        'avg_difficulty': avg_difficulty,
+                        'fixtures_count': len(home_fixtures) + len(away_fixtures)
+                    })
+            
+            if team_difficulty:
+                difficulty_df = pd.DataFrame(team_difficulty)
+                difficulty_df = difficulty_df.sort_values('avg_difficulty')
                 
                 fig = px.bar(
-                    fixture_data, 
-                    x='gw', 
-                    y='points',
-                    title=f"Příštích 5 zápasů - {player['name']}",
-                    color='points',
-                    color_continuous_scale='RdYlGn',
-                    height=200
+                    difficulty_df.head(10),
+                    x='avg_difficulty',
+                    y='team',
+                    orientation='h',
+                    title=f"Nejsnadnější fixtures pro GW {current_gw}-{current_gw + 4}",
+                    color='avg_difficulty',
+                    color_continuous_scale='RdYlGn_r'
                 )
                 fig.update_layout(
-                    showlegend=False,
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='white')
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-                st.divider()
 
-    # Tab: Můj doporučený tým
-    elif selected_tab == "Můj doporučený tým":
-        st.header("⚽ Doporučená sestava (3-5-2) • £100.0m")
+    # Tab: Transfer trendy
+    elif selected_tab == "Transfer trendy":
+        st.header("🔄 Transfer trendy a vlastnictví")
         
-        # Formation visualization
-        st.markdown("""
-        <div class='formation-field'>
-            <h3 style='text-align: center; color: white; margin-bottom: 2rem;'>Formace 3-5-2</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Team sections
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.subheader("🥅 Brankář")
-            st.markdown("""
-            <div class='player-card'>
-                <h4>Pickford</h4>
-                <p>Everton • £5.0m</p>
-                <small>Predikce: 6.2 bodů</small>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col2:
-            st.subheader("🛡️ Obránci")
-            defenders = [
-                {"name": "Gabriel", "team": "Arsenal", "price": "6.0"},
-                {"name": "Ait-Nouri", "team": "Man City", "price": "5.5"},
-                {"name": "Esteve", "team": "Burnley", "price": "4.0"}
-            ]
-            for defender in defenders:
-                st.markdown(f"""
-                <div class='player-card'>
-                    <h5>{defender['name']}</h5>
-                    <p>{defender['team']} • £{defender['price']}m</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        with col3:
-            st.subheader("⚡ Záložníci")
-            midfielders = [
-                {"name": "Salah", "team": "Liverpool", "price": "14.5"},
-                {"name": "Palmer", "team": "Chelsea", "price": "10.5"},
-                {"name": "Saka", "team": "Arsenal", "price": "10.0"},
-                {"name": "Wirtz", "team": "Liverpool", "price": "8.5"},
-                {"name": "Mbeumo", "team": "Brentford", "price": "8.0"}
-            ]
-            for midfielder in midfielders:
-                st.markdown(f"""
-                <div class='player-card'>
-                    <h5>{midfielder['name']}</h5>
-                    <p>{midfielder['team']} • £{midfielder['price']}m</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Forwards
-        st.subheader("🎯 Útočníci")
+        # Most transferred in/out
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("""
-            <div class='player-card'>
-                <h4>Alexander Isak</h4>
-                <p>Newcastle • £10.5m</p>
-                <small>Predikce: 12.8 bodů</small>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col2:
-            st.markdown("""
-            <div class='player-card'>
-                <h4>Jarrod Bowen</h4>
-                <p>West Ham • £8.0m</p>
-                <small>Predikce: 8.1 bodů</small>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Budget breakdown
-        st.subheader("💰 Rozpis rozpočtu")
-        budget_data = {
-            'Pozice': ['Brankáři', 'Obránci', 'Záložníci', 'Útočníci'],
-            'Částka': [9.5, 19.5, 57.5, 23.0],
-            'Hráči': ['Pickford + Kelleher', '3 + 2 na lavičce', '5 + 1 na lavičce', '2 + 1 na lavičce']
-        }
-        budget_df = pd.DataFrame(budget_data)
-        
-        fig = px.pie(
-            budget_df, 
-            values='Částka', 
-            names='Pozice',
-            title="Rozdělení rozpočtu podle pozic",
-            color_discrete_sequence=['#eab308', '#3b82f6', '#22c55e', '#ef4444']
-        )
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white')
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Strategy for 5 gameweeks
-        st.subheader("📈 Strategie na 5 gameweeks dopředu")
-        
-        strategy_data = [
-            {"GW": 1, "Strategie": "START SEZÓNY", "Akce": "Salah (C) vs Sunderland, balanced tým", "Status": "🟢"},
-            {"GW": 2, "Strategie": "VYHODNOCENÍ", "Akce": "Sledujeme formu po GW1, možný transfer Wirtz", "Status": "🟡"},
-            {"GW": 3, "Strategie": "ADAPTACE", "Akce": "Přidáváme Haalanda, OUT Wirtz pokud nedostává minuty", "Status": "🟡"},
-            {"GW": 4, "Strategie": "OPTIMALIZACE", "Akce": "Fixture swing týden, příprava na busy period", "Status": "🔵"},
-            {"GW": 5, "Strategie": "PRVNÍ WILDCARD?", "Akce": "Buď Wildcard nebo standard 1FT", "Status": "🔴"}
-        ]
-        
-        for strategy in strategy_data:
-            st.markdown(f"""
-            <div style='background: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
-                        padding: 1rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #6366f1;'>
-                <div style='display: flex; justify-content: space-between; align-items: center;'>
-                    <div>
-                        <h5 style='color: white; margin: 0;'>{strategy['Status']} GW{strategy['GW']} - {strategy['Strategie']}</h5>
-                        <p style='color: #cbd5e1; margin: 0.5rem 0 0 0; font-size: 0.9rem;'>{strategy['Akce']}</p>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Tab: Fixture analýza
-    elif selected_tab == "Fixture analýza":
-        st.header("📅 Fixture analýza - Gameweek 1")
-        st.markdown("První kolo sezóny 2025/26 - nováčci vs. velikáni")
-
-        for _, fixture in fixtures_df.iterrows():
-            difficulty_color = get_difficulty_color(fixture['difficulty'])
+            st.subheader("📈 Nejvíce přiváděni")
+            most_transferred_in = players_df.nlargest(10, 'transfers_in')
             
-            col1, col2, col3 = st.columns([3, 1, 1])
-            
-            with col1:
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
-                            padding: 1rem; border-radius: 8px; border-left: 4px solid {difficulty_color};'>
-                    <h4 style='color: white; margin: 0;'>{fixture['home_team']} vs {fixture['away_team']}</h4>
-                    <p style='color: #cbd5e1; margin: 0.5rem 0 0 0;'>{fixture['date']} • Obtížnost: {fixture['difficulty']}/5</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                if fixture['difficulty'] <= 2:
-                    st.success("✅ Doporučeno")
-                elif fixture['difficulty'] >= 4:
-                    st.error("⚠️ Opatrně")
-                else:
-                    st.info("➖ Neutrální")
-
-        # Fixture difficulty chart
-        fig = px.bar(
-            fixtures_df,
-            x='home_team',
-            y='difficulty',
-            title="Obtížnost fixtures pro Gameweek 1",
-            color='difficulty',
-            color_continuous_scale='RdYlGn_r'
-        )
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white')
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Tab: Doporučení kapitána
-    elif selected_tab == "Doporučení kapitána":
-        st.header("👑 Doporučení kapitána pro Gameweek 1")
-        st.info("Nová sezóna 2025/26 - Začínáme od nuly!")
-
-        # Top 3 captain picks
-        top_captains = players_df.nlargest(3, 'predicted_points')
-        
-        for idx, captain in top_captains.iterrows():
-            captain_points = captain['predicted_points'] * 2  # Captain double points
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                risk_level = ["🟢 Bezpečné", "🟡 Balanced", "🔴 Risky"][idx] if idx < 3 else "🔴 Risky"
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); 
-                            padding: 1.5rem; border-radius: 12px; margin: 1rem 0;'>
-                    <h3 style='color: #92400e; margin: 0;'>👑 {captain['name']}</h3>
-                    <p style='color: #b45309; margin: 0.5rem 0;'>{captain['team']} • {captain['position']}</p>
-                    <div style='display: flex; justify-content: space-between; margin-top: 1rem;'>
-                        <div><strong>Forma:</strong> {captain['form']}/10</div>
-                        <div><strong>Vlastnictví:</strong> {captain['selected_by_percent']}%</div>
-                        <div><strong>Riziko:</strong> {risk_level}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
+            for _, player in most_transferred_in.iterrows():
+                delta_color = "normal"
                 st.metric(
-                    "Očekávané body (C)",
-                    f"{captain_points:.1f}",
-                    delta=f"+{captain_points - captain['predicted_points']:.1f}"
+                    f"{player['name']} ({player['team']})",
+                    f"{player['transfers_in']:,}",
+                    delta=f"£{player['price']:.1f}m"
+                )
+        
+        with col2:
+            st.subheader("📉 Nejvíce odváděni")
+            most_transferred_out = players_df.nlargest(10, 'transfers_out')
+            
+            for _, player in most_transferred_out.iterrows():
+                st.metric(
+                    f"{player['name']} ({player['team']})",
+                    f"-{player['transfers_out']:,}",
+                    delta=f"£{player['price']:.1f}m"
                 )
 
-        # Captain comparison chart
-        fig = go.Figure()
+        # Transfer trends visualization
+        st.subheader("📊 Transfer aktivita")
         
-        fig.add_trace(go.Bar(
-            name='Normální body',
-            x=top_captains['name'],
-            y=top_captains['predicted_points'],
-            marker_color='lightblue'
-        ))
+        # Get players with significant transfer activity
+        active_transfers = players_df[
+            (players_df['transfers_in'] > 50000) | (players_df['transfers_out'] > 50000)
+        ].copy()
         
-        fig.add_trace(go.Bar(
-            name='Kapitánské body',
-            x=top_captains['name'],
-            y=top_captains['predicted_points'] * 2,
-            marker_color='gold'
-        ))
-        
-        fig.update_layout(
-            title="Porovnání kapitánských voleb",
-            barmode='group',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white')
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Tab: Transfer tips
-    elif selected_tab == "Transfer tips":
-        st.header("🔄 Transfer doporučení pro sezónu 2025/26")
-        st.info("Novinky: 2x všechny chipy každou polovinu sezóny!")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("📈 Transfer IN")
-            transfer_in = [
-                {"name": "Erling Haaland", "team": "Man City", "price": "£14.0m", "points": "11.8 pts"},
-                {"name": "Son Heung-min", "team": "Tottenham", "price": "£9.5m", "points": "9.4 pts"},
-                {"name": "Morgan Rogers", "team": "Aston Villa", "price": "£7.0m", "points": "8.8 pts"}
-            ]
+        if not active_transfers.empty:
+            active_transfers['net_transfers'] = active_transfers['transfers_in'] - active_transfers['transfers_out']
             
-            for player in transfer_in:
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #22c55e22 0%, #22c55e44 100%); 
-                            padding: 1rem; border-radius: 8px; margin: 0.5rem 0; border-left: 4px solid #22c55e;'>
-                    <h5 style='color: white; margin: 0;'>{player['name']}</h5>
-                    <p style='color: #cbd5e1; margin: 0; font-size: 0.9rem;'>{player['team']} • {player['price']}</p>
-                    <strong style='color: #22c55e;'>{player['points']}</strong>
-                </div>
-                """, unsafe_allow_html=True)
+            fig = px.bar(
+                active_transfers.nlargest(15, 'net_transfers', keep='all'),
+                x='net_transfers',
+                y='name',
+                orientation='h',
+                title="Čisté transfery (IN - OUT)",
+                color='net_transfers',
+                color_continuous_scale='RdYlGn'
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-        with col2:
-            st.subheader("📉 Transfer OUT")
-            transfer_out = [
-                {"name": "Florian Wirtz", "reason": "Liverpool • Rotace riziko", "points": "6.2 pts"},
-                {"name": "Maxime Esteve", "reason": "Burnley • Těžké fixtures", "points": "4.2 pts"},
-                {"name": "Bryan Mbeumo", "reason": "Brentford • Transfer spekulace", "points": "6.5 pts"}
-            ]
+    # Tab: Týmová analýza
+    elif selected_tab == "Týmová analýza":
+        st.header("🏟️ Analýza podle týmů")
+        
+        # Team performance analysis
+        team_stats = []
+        for team_id, team_name in teams_dict.items():
+            team_players = players_df[players_df['team'] == team_name]
             
-            for player in transfer_out:
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #ef444422 0%, #ef444444 100%); 
-                            padding: 1rem; border-radius: 8px; margin: 0.5rem 0; border-left: 4px solid #ef4444;'>
-                    <h5 style='color: white; margin: 0;'>{player['name']}</h5>
-                    <p style='color: #cbd5e1; margin: 0; font-size: 0.9rem;'>{player['reason']}</p>
-                    <strong style='color: #ef4444;'>{player['points']}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Transfer trends chart
-        st.subheader("📊 Transfer trendy")
+            if not team_players.empty:
+                team_stats.append({
+                    'team': team_name,
+                    'total_points': team_players['total_points'].sum(),
+                    'avg_price': team_players['price'].mean(),
+                    'players_count': len(team_players),
+                    'top_scorer': team_players.loc[team_players['total_points'].idxmax(), 'name'],
+                    'top_scorer_points': team_players['total_points'].max(),
+                    'most_selected': team_players.loc[team_players['selected_by_percent'].idxmax(), 'name'],
+                    'highest_selection': team_players['selected_by_percent'].max()
+                })
         
-        # Mock transfer data
-        transfer_data = pd.DataFrame({
-            'Hráč': ['Haaland', 'Salah', 'Isak', 'Palmer', 'Saka', 'Wirtz'],
-            'Transfer IN %': [25.3, 15.7, 18.9, 12.4, 8.9, 3.2],
-            'Transfer OUT %': [5.1, 2.3, 4.7, 6.8, 7.2, 15.4]
-        })
-        
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            name='Transfer IN %',
-            x=transfer_data['Hráč'],
-            y=transfer_data['Transfer IN %'],
-            marker_color='#22c55e'
-        ))
-        
-        fig.add_trace(go.Bar(
-            name='Transfer OUT %',
-            x=transfer_data['Hráč'],
-            y=transfer_data['Transfer OUT %'],
-            marker_color='#ef4444'
-        ))
-        
-        fig.update_layout(
-            title="Transfer activity pro top hráče",
-            barmode='group',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white')
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Chip strategy section
-        st.subheader("🎯 Chip strategie")
-        
-        chip_strategy = [
-            {"chip": "Wildcard 1", "timing": "GW5-8", "reason": "podle potřeby po fixture swingu"},
-            {"chip": "Triple Captain", "timing": "vs nováčci", "reason": "v DGW proti slabým týmům"},
-            {"chip": "Bench Boost", "timing": "GW1 nebo DGW", "reason": "když máme silnou lavičku"},
-            {"chip": "Free Hit", "timing": "vs bad fixtures", "reason": "proti těžkým fixtures"}
-        ]
-        
-        for chip in chip_strategy:
-            st.markdown(f"""
-            <div style='background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); 
-                        padding: 1rem; border-radius: 8px; margin: 0.5rem 0;'>
-                <h5 style='color: white; margin: 0;'>🎯 {chip['chip']}</h5>
-                <p style='color: #e0e7ff; margin: 0.5rem 0 0 0; font-size: 0.9rem;'>
-                    <strong>Kdy:</strong> {chip['timing']} | <strong>Proč:</strong> {chip['reason']}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        if team_stats:
+            team_df = pd.DataFrame(team_stats)
+            team_df = team_df.sort_values('total_points', ascending=False)
+            
+            # Top teams by total points
+            st.subheader("🏆 Nejlepší týmy podle celkových bodů")
+            
+            fig = px.bar(
+                team_df.head(10),
+                x='team',
+                y='total_points',
+                title="Celkové body všech hráčů týmu",
+                color='total_points',
+                color_continuous_scale='viridis'
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white'),
+                xaxis_tickangle=-45
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Team details table
+            st.subheader("📋 Detaily týmů")
+            
+            display_df = team_df[['team', 'total_points', 'avg_price', 'top_scorer', 'top_scorer_points', 'most_selected', 'highest_selection']].copy()
+            display_df.columns = ['Tým', 'Celkem bodů', 'Průměrná cena', 'Nejlepší střelec', 'Body nejlepšího', 'Nejvíc vlastněný', 'Vlastnictví %']
+            display_df['Průměrná cena'] = display_df['Průměrná cena'].round(1)
+            display_df['Vlastnictví %'] = display_df['Vlastnictví %'].round(1)
+            
+            st.dataframe(display_df, use_container_width=True)
 
     # Footer
     st.markdown("---")
-    st.markdown("""
+    st.markdown(f"""
     <div style='text-align: center; color: #64748b; padding: 2rem;'>
-        <p>🏆 FPL Predictor - Sezóna 2025/26</p>
-        <p>Vytvořeno pro optimální Fantasy Premier League strategii</p>
+        <p>🏆 FPL Predictor - Live Data z FPL API</p>
+        <p>Poslední update: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</p>
+        <p><small>Data se aktualizují každých 5 minut</small></p>
     </div>
     """, unsafe_allow_html=True)
 
