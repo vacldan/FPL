@@ -52,7 +52,9 @@ def get_top_players(gw_start=1, gw_end=5):
     total_points = {}
     for gw in range(gw_start, gw_end + 1):
         data = load_event_data(gw)
-        for p_id, entry in data.get("elements", {}).items():
+        if not data or "elements" not in data:
+            continue
+        for p_id, entry in data["elements"].items():
             pid = int(p_id)
             pts = entry.get("stats", {}).get("total_points", 0)
             total_points[pid] = total_points.get(pid, 0) + pts
