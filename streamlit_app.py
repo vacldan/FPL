@@ -17,7 +17,7 @@ def load_bootstrap_data():
         res.raise_for_status()
         return res.json()
     except Exception as e:
-        st.error(f"❗ Nepodařilo se načíst data z bootstrap API: {e}")
+        st.error(f"\u2757 Nepodařilo se načíst data z bootstrap API: {e}")
         return {}
 
 @st.cache_data
@@ -28,7 +28,7 @@ def load_event_data(event_id):
         res.raise_for_status()
         return res.json()
     except Exception as e:
-        st.warning(f"⚠️ Chyba při načítání GW{event_id}: {e}")
+        st.warning(f"\u26a0\ufe0f Chyba při načítání GW{event_id}: {e}")
         return {"elements": []}
 
 @st.cache_data
@@ -39,7 +39,7 @@ def load_fixtures():
         res.raise_for_status()
         return res.json()
     except Exception as e:
-        st.error(f"❗ Nelze načíst rozpis zápasů: {e}")
+        st.error(f"\u2757 Nelze načíst rozpis zápasů: {e}")
         return []
 
 @st.cache_data
@@ -128,13 +128,13 @@ tabs = st.tabs([
 ])
 
 with tabs[0]:
-    st.title("⚽ FPL – Top 20 hráčů")
+    st.title("\u26bd FPL – Top 20 hráčů")
     df, start_gw, end_gw = get_top_players()
     if df.empty:
-        st.warning("❗ Data nejsou dostupná.")
+        st.warning("\u2757 Data nejsou dostupná.")
     else:
         st.success("Hotovo!")
-        view_option = st.radio("Zobrazit dle:", ["Historické body", "Predikce (GW{}–GW{})".format(start_gw, end_gw), "Obojí"])
+        view_option = st.radio("Zobrazit dle:", ["Historické body", f"Predikce (GW{start_gw}–GW{end_gw})", "Obojí"])
         if view_option == "Historické body":
             st.dataframe(df[["name", "team", "total_points_so_far", "goals_scored", "assists", "selected_by_percent"]], use_container_width=True)
         elif view_option.startswith("Predikce"):
@@ -144,33 +144,45 @@ with tabs[0]:
             st.dataframe(df, use_container_width=True)
 
 with tabs[2]:
-    st.title("🤖 AI predikovaný tým")
+    st.title("\ud83e\udd16 AI predikovaný tým")
     df, start_gw, end_gw = get_top_players()
     if df.empty:
-        st.warning("❗ Data nejsou dostupná.")
+        st.warning("\u2757 Data nejsou dostupná.")
     else:
         top_team = df.head(11).reset_index(drop=True)
 
-        st.markdown("#### 🧮 Predikce bodů")
+        st.markdown("#### \ud83e\uddea Predikce bodů")
         for gw in range(start_gw, end_gw + 1):
             st.write(f"**GW{gw}**", top_team[["name", "team", f"predicted_gw{gw}"]])
 
         st.markdown("---")
-        st.markdown("#### 🧤 Vizualizace sestavy (graficky)")
-        formation = {
-            'Goalkeeper': [top_team.iloc[0]],
-            'Defenders': [top_team.iloc[1], top_team.iloc[2], top_team.iloc[3]],
-            'Midfielders': [top_team.iloc[4], top_team.iloc[5], top_team.iloc[6], top_team.iloc[7]],
-            'Forwards': [top_team.iloc[8], top_team.iloc[9], top_team.iloc[10]]
-        }
+        st.markdown("#### \ud83e\uddd4\ufe0f Vizualizace sestavy (graficky)")
 
-        col1, col2, col3 = st.columns([1, 4, 1])
-        with col2:
-            for group in formation:
-                st.subheader(group)
-                for player in formation[group]:
-                    st.markdown(f"**{player['name']}** – {player['team']} | {player['predicted_total']:.1f} pts")
+        def render_line(players):
+            cols = st.columns(len(players))
+            for i, player in enumerate(players):
+                with cols[i]:
+                    st.markdown(f"**{player['name']}**")
+                    st.markdown(f":shirt: `{player['team']}`")
+                    st.markdown(f"\ud83d\udcc5 GW body: {player['predicted_total']:.1f}")
 
-        st.markdown("### 🔁 Doporučení kroků")
+        gk = top_team.iloc[0]
+        defs = top_team.iloc[1:4]
+        mids = top_team.iloc[4:8]
+        fwds = top_team.iloc[8:11]
+
+        st.markdown("**\ud83e\udde9 Brankář**")
+        render_line([gk])
+
+        st.markdown("**\ud83d\udee1\ufe0f Obránci**")
+        render_line(defs.itertuples(index=False))
+
+        st.markdown("**\ud83c\udfaf Záložníci**")
+        render_line(mids.itertuples(index=False))
+
+        st.markdown("**\u2694\ufe0f Útočníci**")
+        render_line(fwds.itertuples(index=False))
+
+        st.markdown("### \ud83d\udd04 Doporučení kroků")
         for gw in range(start_gw, end_gw + 1):
             st.markdown(f"**GW{gw}** – Sleduj dostupnost hráčů, rozpis a bonusy. Prioritizuj kapitána s nízkým FDR a vysokým `predicted_gw{gw}`.")
