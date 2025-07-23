@@ -42,8 +42,22 @@ def load_fixtures():
         st.error(f"❗ Nelze načíst rozpis zápasů: {e}")
         return []
 
+@st.cache_data
+def load_current_gw():
+    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+    try:
+        res = requests.get(url)
+        res.raise_for_status()
+        events = res.json().get("events", [])
+        for e in events:
+            if e["is_current"]:
+                return e["id"]
+    except Exception as e:
+        st.warning(f"Nelze zjistit aktuální GW: {e}")
+    return 1
+
 # === FUNKCE ===
-def get_team_difficulty():
+def get_team_difficulty(start_gw, end_gw):
     fixtures = pd.DataFrame(load_fixtures())
     bootstrap = load_bootstrap_data()
     if bootstrap and not fixtures.empty:
@@ -52,8 +66,8 @@ def get_team_difficulty():
         fixtures['team_a'] = fixtures['team_a'].map(team_id_to_name)
         fixtures['team_h'] = fixtures['team_h'].map(team_id_to_name)
         fixtures['event'] = fixtures['event'].fillna(0).astype(int)
-        upcoming = fixtures[fixtures['event'].between(6, 10)]
-        matrix = pd.DataFrame(index=team_id_to_name.values(), columns=range(6, 11))
+        upcoming = fixtures[fixtures['event'].between(start_gw, end_gw)]
+        matrix = pd.DataFrame(index=team_id_to_name.values(), columns=range(start_gw, end_gw + 1))
 
         for _, row in upcoming.iterrows():
             for team, diff in [(row['team_h'], row['team_h_difficulty']),
@@ -65,17 +79,20 @@ def get_team_difficulty():
         return avg_fdr
     return {}
 
-def get_top_players(gw_start=1, gw_end=5):
+def get_top_players():
+    current_gw = load_current_gw()
+    start_gw = current_gw + 1
+    end_gw = current_gw + 4
+
     bootstrap = load_bootstrap_data()
     if not bootstrap:
-        return pd.DataFrame()
+        return pd.DataFrame(), start_gw, end_gw
     players = pd.DataFrame(bootstrap.get('elements', []))
     teams = pd.DataFrame(bootstrap.get('teams', []))
     total_points = {}
-    for gw in range(gw_start, gw_end + 1):
+    for gw in range(1, current_gw + 1):
         data = load_event_data(gw)
         if not data or "elements" not in data or not data["elements"]:
-            st.warning(f"⚠️ Data z GW{gw} nejsou dostupná nebo jsou prázdná.")
             continue
         for entry in data["elements"]:
             pid = entry.get("id")
@@ -84,29 +101,25 @@ def get_top_players(gw_start=1, gw_end=5):
                 total_points[pid] = total_points.get(pid, 0) + pts
 
     if players.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), start_gw, end_gw
 
-    players["points_gw1_5"] = players["id"].map(total_points)
-    players = players.dropna(subset=["points_gw1_5"])
+    players["total_points_so_far"] = players["id"].map(total_points)
+    players = players.dropna(subset=["total_points_so_far"])
     players["name"] = players['first_name'] + " " + players['second_name']
     players["team"] = players['team'].map(teams.set_index("id")["name"])
 
-    # === PREDIKCE NA DALŠÍ GW S FDR ===
-    avg_fdr = get_team_difficulty()
+    avg_fdr = get_team_difficulty(start_gw, end_gw)
     players['avg_fdr'] = players['team'].map(avg_fdr)
     players['base_points'] = players['points_per_game'].astype(float)
     players['adjusted'] = players['base_points'] / players['avg_fdr']
 
-    players["predicted_gw6"] = players["adjusted"] * 0.95
-    players["predicted_gw7"] = players["adjusted"] * 1.05
-    players["predicted_gw8"] = players["adjusted"] * 1.00
-    players["predicted_gw9"] = players["adjusted"] * 1.10
-    players["predicted_gw10"] = players["adjusted"] * 1.00
+    for i, gw in enumerate(range(start_gw, end_gw + 1)):
+        weight = [0.95, 1.05, 1.0, 1.1][i] if i < 4 else 1.0
+        players[f"predicted_gw{gw}"] = players["adjusted"] * weight
 
-    return players.sort_values("points_gw1_5", ascending=False).head(20)[
-        ["name", "team", "points_gw1_5", "goals_scored", "assists", "selected_by_percent",
-         "predicted_gw6", "predicted_gw7", "predicted_gw8", "predicted_gw9", "predicted_gw10"]
-    ]
+    players["predicted_total"] = sum(players[f"predicted_gw{gw}"] for gw in range(start_gw, end_gw + 1))
+
+    return players.sort_values("predicted_total", ascending=False), start_gw, end_gw
 
 # === UI ===
 tabs = st.tabs([
@@ -114,112 +127,50 @@ tabs = st.tabs([
     "Live predikce", "Chip plánovač", "FDR kalkulátor"
 ])
 
-# === 1. TOP HRÁČI ===
 with tabs[0]:
-    st.title("⚽ FPL – Top 20 hráčů po 5 kolech")
-    df = get_top_players()
+    st.title("⚽ FPL – Top 20 hráčů")
+    df, start_gw, end_gw = get_top_players()
     if df.empty:
-        st.warning("❗ Data nejsou dostupná. Zkuste znovu později nebo lokálně.")
+        st.warning("❗ Data nejsou dostupná.")
     else:
         st.success("Hotovo!")
-        st.dataframe(df, use_container_width=True)
-
-# === 2. TRANSFER OPTIMIZER ===
-with tabs[1]:
-    st.header("Přestupový asistent")
-    name = st.text_input("Zadej jméno hráče pro srovnání")
-    bootstrap = load_bootstrap_data()
-    if name and bootstrap:
-        players = pd.DataFrame(bootstrap['elements'])
-        players['name'] = players['first_name'] + " " + players['second_name']
-        match = players[players['name'].str.contains(name, case=False)]
-        if not match.empty:
-            st.dataframe(match[["name", "now_cost", "points_per_game", "goals_scored", "assists"]])
+        view_option = st.radio("Zobrazit dle:", ["Historické body", "Predikce (GW{}–GW{})".format(start_gw, end_gw), "Obojí"])
+        if view_option == "Historické body":
+            st.dataframe(df[["name", "team", "total_points_so_far", "goals_scored", "assists", "selected_by_percent"]], use_container_width=True)
+        elif view_option.startswith("Predikce"):
+            cols = ["name", "team"] + [f"predicted_gw{gw}" for gw in range(start_gw, end_gw + 1)] + ["predicted_total"]
+            st.dataframe(df[cols], use_container_width=True)
         else:
-            st.warning("Hráč nenalezen.")
+            st.dataframe(df, use_container_width=True)
 
-# === 3. AI TEAM ===
 with tabs[2]:
-    st.header("AI doporučený tým pro nadcházejících 5 kol")
-    ai_team = [
-        "Areola", "Trippier", "Gabriel", "Estupiñán",
-        "Salah", "Palmer", "Saka", "Foden",
-        "Haaland (C)", "Isak", "João Pedro"
-    ]
-    st.markdown("### 🧠 AI Výběr 11 hráčů:")
-    for player in ai_team:
-        st.write(f"- {player}")
-    st.markdown("### 📅 Doporučené kroky na dalších 5 týdnů")
-    st.markdown("""
-    1. **GW6**: Pokud má Palmer těžký los, vyměň ho za Bowen.
-    2. **GW7**: Použij 1 FT na obranu – Trippier -> Porro (lepší losy).
-    3. **GW8**: Zvaž aktivaci **Wildcard**, pokud budou zranění.
-    4. **GW9**: Kapitán Salah místo Haalanda (slabý soupeř doma).
-    5. **GW10**: Přidej levného obránce s rostoucí formou (např. Kabore).
-    """)
-
-# === 4. LIVE PREDIKCE ===
-with tabs[3]:
-    st.header("Predikce bodů pro další kolo (simulace)")
-    bootstrap = load_bootstrap_data()
-    if bootstrap:
-        players = pd.DataFrame(bootstrap['elements'])
-        players['name'] = players['first_name'] + " " + players['second_name']
-        players['predicted_points'] = players['points_per_game'].astype(float) * 0.95
-        top_preds = players.sort_values('predicted_points', ascending=False).head(15)
-        st.dataframe(top_preds[["name", "now_cost", "predicted_points"]])
+    st.title("🤖 AI predikovaný tým")
+    df, start_gw, end_gw = get_top_players()
+    if df.empty:
+        st.warning("❗ Data nejsou dostupná.")
     else:
-        st.error("Nelze načíst data pro predikce.")
+        top_team = df.head(11).reset_index(drop=True)
 
-# === 5. CHIP PLÁNOVAČ ===
-with tabs[4]:
-    st.header("Chip plánovač")
-    st.markdown("""
-    🧮 Doporučení použití chipů:
-    - **Wildcard**: ideální kolem GW8–GW9 před přetížením rozpisu.
-    - **Bench Boost**: GW11 nebo GW15 s plnou lavičkou.
-    - **Triple Captain**: čekej na dvojité kolo City/Liverpool.
-    - **Free Hit**: použij při blank Gameweeku (např. GW29).
+        st.markdown("#### 🧮 Predikce bodů")
+        for gw in range(start_gw, end_gw + 1):
+            st.write(f"**GW{gw}**", top_team[["name", "team", f"predicted_gw{gw}"]])
 
-    📅 Dnes: {today}
-    """.format(today=datetime.today().strftime('%d.%m.%Y')))
+        st.markdown("---")
+        st.markdown("#### 🧤 Vizualizace sestavy (graficky)")
+        formation = {
+            'Goalkeeper': [top_team.iloc[0]],
+            'Defenders': [top_team.iloc[1], top_team.iloc[2], top_team.iloc[3]],
+            'Midfielders': [top_team.iloc[4], top_team.iloc[5], top_team.iloc[6], top_team.iloc[7]],
+            'Forwards': [top_team.iloc[8], top_team.iloc[9], top_team.iloc[10]]
+        }
 
-# === 6. FDR KALKULÁTOR ===
-with tabs[5]:
-    st.header("Fixture Difficulty Rating (FDR) vizualizace")
-    fixtures = pd.DataFrame(load_fixtures())
-    bootstrap = load_bootstrap_data()
-    if bootstrap and not fixtures.empty:
-        teams = pd.DataFrame(bootstrap['teams'])
-        team_id_to_name = teams.set_index("id")["name"].to_dict()
-        fixtures['team_a'] = fixtures['team_a'].map(team_id_to_name)
-        fixtures['team_h'] = fixtures['team_h'].map(team_id_to_name)
-        fixtures['event'] = fixtures['event'].fillna(0).astype(int)
-        upcoming = fixtures[fixtures['event'] <= 10]
+        col1, col2, col3 = st.columns([1, 4, 1])
+        with col2:
+            for group in formation:
+                st.subheader(group)
+                for player in formation[group]:
+                    st.markdown(f"**{player['name']}** – {player['team']} | {player['predicted_total']:.1f} pts")
 
-        st.subheader("📊 Heatmapa obtížnosti rozpisu (GW1–10)")
-        team_list = sorted(teams['name'].unique())
-        matrix = pd.DataFrame(index=team_list, columns=range(1, 11))
-
-        for _, row in upcoming.iterrows():
-            for team, opp, diff in [(row['team_h'], row['team_a'], row['team_h_difficulty']),
-                                    (row['team_a'], row['team_h'], row['team_a_difficulty'])]:
-                if team in matrix.index:
-                    matrix.at[team, row['event']] = diff
-
-        fig, ax = plt.subplots(figsize=(14, 10))
-        sns.heatmap(matrix.astype(float), cmap="YlOrRd", linewidths=0.5, annot=True, fmt=".0f", cbar_kws={'label': 'FDR'})
-        st.pyplot(fig)
-
-        st.subheader("🎯 Doporučení hráčů podle FDR + forma")
-        players = pd.DataFrame(bootstrap['elements'])
-        players['name'] = players['first_name'] + " " + players['second_name']
-        players['team'] = players['team'].map(team_id_to_name)
-        players = players[['name', 'team', 'points_per_game', 'now_cost']]
-        team_fdr = matrix.apply(pd.to_numeric, errors='coerce').mean(axis=1).to_dict()
-        players['avg_fdr'] = players['team'].map(team_fdr)
-        players['score'] = players['points_per_game'].astype(float) / players['avg_fdr']
-        top_combined = players.sort_values('score', ascending=False).head(15)
-        st.dataframe(top_combined[['name', 'team', 'points_per_game', 'avg_fdr', 'score']])
-    else:
-        st.warning("❗ FDR data nejsou dostupná.")
+        st.markdown("### 🔁 Doporučení kroků")
+        for gw in range(start_gw, end_gw + 1):
+            st.markdown(f"**GW{gw}** – Sleduj dostupnost hráčů, rozpis a bonusy. Prioritizuj kapitána s nízkým FDR a vysokým `predicted_gw{gw}`.")
