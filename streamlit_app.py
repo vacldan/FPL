@@ -684,9 +684,9 @@ def main():
     st.markdown("---")
     st.markdown(f"""
     <div style='text-align: center; color: #64748b; padding: 2rem;'>
-        <p>🏆 FPL Predictor - Live Data z FPL API</p>
-        <p>Poslední update: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</p>
-        <p><small>Data se aktualizují každých 5 minut</small></p>
+        <p>🏆 FPL Predictor - Sezóna 2025/26</p>
+        <p>🆕 Čerstvý start! Všichni hráči začínají s nulou</p>
+        <p>Poslední update: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')} • Data se aktualizují každých 5 minut</p>
     </div>
     """, unsafe_allow_html=True)
 
