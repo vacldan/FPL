@@ -517,94 +517,73 @@ def main():
         ai_team, total_cost = create_ai_team(players_df, fixtures_df, current_gw)
         
         # Info o týmu
-        st.info(f"💰 **Celkový rozpočet: £{total_cost:.1f}m / £100.0m** • Zbývá: £{100.0-total_cost:.1f}m")
+        remaining_budget = 100.0 - total_cost
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("💰 Celkový rozpočet", f"£{total_cost:.1f}m")
+        with col2:
+            st.metric("💸 Zbývá", f"£{remaining_budget:.1f}m")
+        with col3:
+            st.metric("⚽ Formace", "3-5-2")
         
-        # Formace display
-        st.markdown("""
-        <div style='background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
-                    padding: 2rem; border-radius: 15px; margin: 2rem 0; position: relative;'>
-            <div style='position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
-                        background: url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 60\'%3E%3Crect width=\'100\' height=\'60\' fill=\'%2322c55e\' opacity=\'0.3\'/%3E%3Cline x1=\'50\' y1=\'0\' x2=\'50\' y2=\'60\' stroke=\'white\' stroke-width=\'0.2\' opacity=\'0.5\'/%3E%3Ccircle cx=\'50\' cy=\'30\' r=\'8\' fill=\'none\' stroke=\'white\' stroke-width=\'0.2\' opacity=\'0.5\'/%3E%3C/svg%3E") center/cover;
-                        border-radius: 15px;'></div>
-            <h2 style='text-align: center; color: white; position: relative; z-index: 1; margin-bottom: 2rem;'>
-                ⚽ Formace 3-5-2
-            </h2>
-        </div>
-        """, unsafe_allow_html=True)
+        st.success("✅ Tým je připravený! Balanced rozpočet s kvalitními hráči.")
         
         # Zobrazení hráčů podle pozic
-        positions = [
-            ('🥅 Brankáři', ai_team.get('GK', []), '#eab308'),
-            ('🛡️ Obránci', ai_team.get('DEF', []), '#3b82f6'), 
-            ('⚡ Záložníci', ai_team.get('MID', []), '#22c55e'),
-            ('🎯 Útočníci', ai_team.get('FWD', []), '#ef4444')
+        positions_config = [
+            ('🥅 Brankáři', ai_team.get('GK', []), 1, 1),  # (název, hráči, main, bench)
+            ('🛡️ Obránci', ai_team.get('DEF', []), 3, 2),
+            ('⚡ Záložníci', ai_team.get('MID', []), 5, 0),
+            ('🎯 Útočníci', ai_team.get('FWD', []), 2, 1)
         ]
         
-        for pos_name, players, color in positions:
+        for pos_name, players, main_count, bench_count in positions_config:
             if players:
                 st.subheader(pos_name)
                 
-                # Zobrazení hlavních hráčů vs lavička
-                if pos_name == '🥅 Brankáři':
-                    main_players = players[:1]  # 1 hlavní
-                    bench_players = players[1:]  # 1 na lavičku
-                elif pos_name == '🛡️ Obránci':
-                    main_players = players[:3]  # 3 hlavní
-                    bench_players = players[3:]  # 2 na lavičku
-                elif pos_name == '⚡ Záložníci':
-                    main_players = players[:5]  # 5 hlavní (možnost rotace)
-                    bench_players = []
-                else:  # Útočníci
-                    main_players = players[:2]  # 2 hlavní
-                    bench_players = players[2:]  # 1 na lavičku
+                main_players = players[:main_count]
+                bench_players = players[main_count:main_count+bench_count]
                 
                 # Hlavní sestava
                 if main_players:
-                    st.markdown("**Hlavní sestava:**")
-                    cols = st.columns(len(main_players))
+                    st.write("**Hlavní sestava:**")
+                    
+                    if len(main_players) <= 3:
+                        cols = st.columns(len(main_players))
+                    else:
+                        # Pro 5 záložníků rozdělit na 2 řády
+                        cols = st.columns(3) + st.columns(2) if len(main_players) == 5 else st.columns(len(main_players))
+                    
                     for i, player in enumerate(main_players):
-                        with cols[i]:
-                            # Fixtures pro hráče
+                        col_index = i if len(main_players) <= 3 else (i if i < 3 else i - 3)
+                        with cols[col_index]:
+                            # Fixtures preview
                             fixtures = get_player_next_fixtures(player['team'], fixtures_df, current_gw, 4)
-                            fixtures_display = ""
-                            for fix in fixtures[:4]:
-                                diff_color = '#22c55e' if fix['difficulty'] <= 2 else '#eab308' if fix['difficulty'] == 3 else '#ef4444'
-                                home_away = '🏠' if fix['is_home'] else '✈️'
-                                fixtures_display += f"""
-                                <div style='text-align: center; margin: 0.2rem 0;'>
-                                    <small style='color: {diff_color}; font-weight: bold;'>
-                                        GW{fix['gw']}: {fix['opponent']} {home_away}
-                                    </small>
-                                </div>
-                                """
                             
-                            st.markdown(f"""
-                            <div style='background: linear-gradient(135deg, {color}22 0%, {color}44 100%); 
-                                        padding: 1rem; border-radius: 10px; text-align: center; margin: 0.5rem 0;
-                                        border: 2px solid {color};'>
-                                <h4 style='color: white; margin: 0;'>{player['web_name']}</h4>
-                                <p style='color: #cbd5e1; margin: 0.5rem 0; font-size: 0.9rem;'>{player['team']}</p>
-                                <p style='color: #10b981; font-weight: bold; margin: 0;'>£{player['price']:.1f}m</p>
-                                <small style='color: #a78bfa;'>Predikce: {player['predicted_points']:.1f} | Forma: {player['form']:.1f}</small>
-                                {fixtures_display}
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Player card
+                            with st.container():
+                                st.write(f"**{player['web_name']}**")
+                                st.write(f"{player['team']} • £{player['price']:.1f}m")
+                                st.write(f"Predikce: {player['predicted_points']:.1f} | Forma: {player['form']:.1f}")
+                                
+                                # Fixtures
+                                if fixtures:
+                                    fixture_text = ""
+                                    for fix in fixtures[:4]:
+                                        home_away = "🏠" if fix['is_home'] else "✈️"
+                                        difficulty_emoji = "🟢" if fix['difficulty'] <= 2 else "🟡" if fix['difficulty'] == 3 else "🔴"
+                                        fixture_text += f"GW{fix['gw']}: {fix['opponent']} {home_away} {difficulty_emoji}  \n"
+                                    st.write(fixture_text)
                 
                 # Lavička
                 if bench_players:
-                    st.markdown("**Lavička:**")
+                    st.write("**Lavička:**")
                     bench_cols = st.columns(len(bench_players))
                     for i, player in enumerate(bench_players):
                         with bench_cols[i]:
-                            st.markdown(f"""
-                            <div style='background: linear-gradient(135deg, #6b728022 0%, #6b728044 100%); 
-                                        padding: 0.8rem; border-radius: 8px; text-align: center; margin: 0.5rem 0;
-                                        border: 1px solid #6b7280;'>
-                                <h5 style='color: #d1d5db; margin: 0;'>{player['web_name']}</h5>
-                                <p style='color: #9ca3af; margin: 0.3rem 0; font-size: 0.8rem;'>{player['team']}</p>
-                                <p style='color: #6b7280; font-weight: bold; margin: 0; font-size: 0.9rem;'>£{player['price']:.1f}m</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            st.write(f"**{player['web_name']}** (Lavička)")
+                            st.write(f"{player['team']} • £{player['price']:.1f}m")
+                
+                st.divider()
         
         # Kapitán doporučení
         st.subheader("👑 Kapitán doporučení")
@@ -617,20 +596,14 @@ def main():
         captain_candidates = sorted(all_players, key=lambda x: x['predicted_points'], reverse=True)[:3]
         
         col1, col2, col3 = st.columns(3)
+        risk_levels = ["🟢 Bezpečný", "🟡 Střední", "🔴 Risky"]
+        
         for i, candidate in enumerate(captain_candidates):
             with [col1, col2, col3][i]:
-                risk_level = ["🟢 Bezpečný", "🟡 Střední", "🔴 Risky"][i]
-                st.markdown(f"""
-                <div style='background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); 
-                            padding: 1rem; border-radius: 10px; text-align: center;'>
-                    <h4 style='color: #92400e; margin: 0;'>👑 {candidate['web_name']}</h4>
-                    <p style='color: #b45309; margin: 0.5rem 0;'>{candidate['team']} • £{candidate['price']:.1f}m</p>
-                    <p style='color: #92400e; font-weight: bold; margin: 0;'>
-                        Predikce (C): {candidate['predicted_points']*2:.1f} bodů
-                    </p>
-                    <small style='color: #b45309;'>{risk_level}</small>
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"**👑 {candidate['web_name']}**")
+                st.write(f"{candidate['team']} • £{candidate['price']:.1f}m")
+                st.write(f"**Predikce (C): {candidate['predicted_points']*2:.1f} bodů**")
+                st.write(f"Riziko: {risk_levels[i]}")
         
         # Strategie pro následující 4 GW
         st.subheader("📋 AI Strategie pro následující 4 Gameweeks")
@@ -638,40 +611,18 @@ def main():
         strategies = create_gameweek_strategy(current_gw)
         
         for strategy in strategies:
-            st.markdown(f"""
-            <div style='background: linear-gradient(135deg, #1f2937 0%, #374151 100%); 
-                        padding: 1.5rem; border-radius: 12px; margin: 1rem 0;
-                        border-left: 5px solid #6366f1;'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                    <h4 style='color: white; margin: 0;'>GW{strategy['gw']}: {strategy['title']}</h4>
-                    <span style='background: rgba(99, 102, 241, 0.2); color: #a5b4fc; 
-                                 padding: 0.3rem 0.8rem; border-radius: 15px; font-size: 0.8rem;'>
-                        {strategy['risk_level']}
-                    </span>
-                </div>
+            with st.expander(f"GW{strategy['gw']}: {strategy['title']} {strategy['risk_level']}"):
+                col1, col2 = st.columns(2)
                 
-                <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;'>
-                    <div>
-                        <strong style='color: #fbbf24;'>👑 Kapitán:</strong>
-                        <p style='color: #e5e7eb; margin: 0.3rem 0;'>{strategy['captain']}</p>
-                    </div>
-                    <div>
-                        <strong style='color: #10b981;'>🔄 Transfery:</strong>
-                        <p style='color: #e5e7eb; margin: 0.3rem 0;'>{strategy['transfers']}</p>
-                    </div>
-                </div>
+                with col1:
+                    st.write(f"**👑 Kapitán:** {strategy['captain']}")
+                    st.write(f"**🔄 Transfery:** {strategy['transfers']}")
                 
-                <div style='margin-bottom: 1rem;'>
-                    <strong style='color: #8b5cf6;'>🎯 Strategie:</strong>
-                    <p style='color: #e5e7eb; margin: 0.5rem 0;'>{strategy['strategy']}</p>
-                </div>
+                with col2:
+                    st.write(f"**🎯 Zaměření:** {strategy['focus']}")
+                    st.write(f"**Riziko:** {strategy['risk_level']}")
                 
-                <div style='text-align: center; background: rgba(139, 92, 246, 0.1); 
-                            padding: 0.5rem; border-radius: 8px;'>
-                    <strong style='color: #c4b5fd;'>Zaměření: {strategy['focus']}</strong>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                st.write(f"**Strategie:** {strategy['strategy']}")
         
         # Key insights
         st.subheader("💡 Klíčové poznatky AI strategie")
@@ -679,34 +630,51 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("""
-            <div style='background: linear-gradient(135deg, #059669 0%, #10b981 100%); 
-                        padding: 1rem; border-radius: 10px;'>
-                <h4 style='color: white; margin: 0 0 1rem 0;'>✅ Výhody tohoto týmu</h4>
-                <ul style='color: #d1fae5; margin: 0; padding-left: 1.2rem;'>
-                    <li>Balanced rozpočet - žádné risiko</li>
-                    <li>Mix premium + differential hráčů</li>
-                    <li>Dobré fixtures pro prvních 4 GW</li>
-                    <li>Flexibility pro rotace</li>
-                    <li>Silná lavička pro emergency</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            st.success("**✅ Výhody tohoto týmu**")
+            st.write("""
+            • Balanced rozpočet - žádné risiko  
+            • Mix premium + differential hráčů  
+            • Dobré fixtures pro prvních 4 GW  
+            • Flexibility pro rotace  
+            • Silná lavička pro emergency
+            """)
         
         with col2:
-            st.markdown("""
-            <div style='background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); 
-                        padding: 1rem; border-radius: 10px;'>
-                <h4 style='color: white; margin: 0 0 1rem 0;'>⚠️ Rizika a pozornost</h4>
-                <ul style='color: #fecaca; margin: 0; padding-left: 1.2rem;'>
-                    <li>Sleduj injury news před GW</li>
-                    <li>Rotation risk u některých hráčů</li>
-                    <li>Fixture swing od GW3</li>
-                    <li>Nová sezóna = nepředvídatelnost</li>
-                    <li>Transfer trendy můžou ovlivnit ceny</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            st.error("**⚠️ Rizika a pozornost**")
+            st.write("""
+            • Sleduj injury news před GW  
+            • Rotation risk u některých hráčů  
+            • Fixture swing od GW3  
+            • Nová sezóna = nepředvídatelnost  
+            • Transfer trendy můžou ovlivnit ceny
+            """)
+        
+        # Team value breakdown
+        st.subheader("💰 Rozpis rozpočtu")
+        
+        if ai_team:
+            position_costs = {
+                'Brankáři': sum(p['price'] for p in ai_team.get('GK', [])),
+                'Obránci': sum(p['price'] for p in ai_team.get('DEF', [])),
+                'Záložníci': sum(p['price'] for p in ai_team.get('MID', [])),
+                'Útočníci': sum(p['price'] for p in ai_team.get('FWD', []))
+            }
+            
+            cost_df = pd.DataFrame(list(position_costs.items()), columns=['Pozice', 'Cena'])
+            
+            fig = px.pie(
+                cost_df,
+                values='Cena',
+                names='Pozice',
+                title="Rozdělení rozpočtu podle pozic",
+                color_discrete_sequence=['#eab308', '#3b82f6', '#22c55e', '#ef4444']
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
     # Tab: Top hráči podle ceny
     elif selected_tab == "Top hráči podle ceny":
