@@ -1,168 +1,4 @@
-# Tab: AI Doporučený tým
-    elif selected_tab == "AI Doporučený tým":
-        st.header("🤖 AI Doporučený tým - FPL pravidla 2025/26")
-        st.markdown("**Oficiální pravidla:** £100m budget • 15 hráčů (2-5-5-3) • Max 3 z týmu • Starting XI respektuje FPL formaci")
-        
-        # Vytvoření AI týmu podle pravidel
-        ai_team, total_cost = create_ai_team(players_df, fixtures_df, current_gw)
-        
-        # Kontrola pravidel
-        team_summary = {
-            'GK': len(ai_team.get('GK', [])),
-            'DEF': len(ai_team.get('DEF', [])), 
-            'MID': len(ai_team.get('MID', [])),
-            'FWD': len(ai_team.get('FWD', []))
-        }
-        
-        total_players = sum(team_summary.values())
-        remaining_budget = 100.0 - total_cost
-        
-        # Status check
-        if total_players == 15 and remaining_budget >= 0:
-            status_color = "success"
-            status_text = f"✅ Tým splňuje FPL pravidla!"
-        else:
-            status_color = "error" 
-            status_text = f"⚠️ Problém s týmem: {total_players}/15 hráčů"
-        
-        # Info metriky
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("💰 Rozpočet", f"£{total_cost:.1f}m")
-        with col2:
-            st.metric("💸 Zbývá", f"£{remaining_budget:.1f}m") 
-        with col3:
-            st.metric("👥 Hráči", f"{total_players}/15")
-        with col4:
-            st.metric("⚽ Formace", f"{team_summary['DEF']}-{team_summary['MID']}-{team_summary['FWD']}")
-        
-        if status_color == "success":
-            st.success(status_text)
-        else:
-            st.error(status_text)
-        
-        # FPL pravidla reminder
-        st.info("📋 **FPL 2025/26 Novinky:** 2x všechny chipy • Obránci body za 10 CBIT • GW16 bonus 5 FT (AFCON) • Defensive contributions")
-        
-        # Optimální starting XI podle FPL pravidel
-        optimal_xi = get_optimal_formation(ai_team)
-        
-        st.subheader("🏟️ Starting XI (Optimální formace)")
-        st.markdown("*Vybráno podle AI skóre s respektováním FPL minimálních požadavků*")
-        
-        # Zobrazení starting XI
-        xi_positions = [
-            ('🥅 Brankář', optimal_xi.get('GK', [])),
-            ('🛡️ Obránci', optimal_xi.get('DEF', [])),
-            ('⚡ Záložníci', optimal_xi.get('MID', [])),
-            ('🎯 Útočníci', optimal_xi.get('FWD', []))
-        ]
-        
-        for pos_name, players in xi_positions:
-            if players:
-                st.write(f"**{pos_name} ({len(players)})**")
-                
-                if len(players) <= 4:
-                    cols = st.columns(len(players))
-                else:
-                    # Pro 5 záložníků - rozdělení
-                    cols = st.columns(3) + st.columns(2) if len(players) == 5 else st.columns(len(players))
-                
-                for i, player in enumerate(players):
-                    col_index = i if len(players) <= 4 else (i if i < 3 else i - 3)
-                    with cols[col_index]:
-                        # Fixtures preview
-                        fixtures = get_player_next_fixtures(player['team'], fixtures_df, current_gw, 4)
-                        
-                        st.write(f"**{player['web_name']}** ⭐")
-                        st.write(f"{player['team']} • £{player['price']:.1f}m")
-                        st.write(f"AI skóre: {player['ai_score']:.1f}")
-                        
-                        # Fixtures s obtížností
-                        if fixtures:
-                            fixture_text = "**Fixtures:** "
-                            for fix in fixtures[:3]:  # Prvních 3
-                                home_away = "🏠" if fix['is_home'] else "✈️"  
-                                difficulty_emoji = "🟢" if fix['difficulty'] <= 2 else "🟡" if fix['difficulty'] == 3 else "🔴"
-                                fixture_text += f"GW{fix['gw']}: {fix['opponent']} {home_away}{difficulty_emoji} "
-                            st.write(fixture_text)
-                st.divider()
-        
-        # Lavička (zbývající hráči)
-        st.subheader("🪑 Lavička")
-        
-        bench_players = []
-        starting_players = set()
-        
-        # Vytvoř set starting hráčů
-        for pos_players in optimal_xi.values():
-            for player in pos_players:
-                starting_players.add(player['id'])
-        
-        # Najdi hráče na lavičce
-        for pos in ['GK', 'DEF', 'MID', 'FWD']:
-            for player in ai_team.get(pos, []):
-                if player['id'] not in starting_players:
-                    bench_players.append((player, pos))
-        
-        if bench_players:
-            bench_cols = st.columns(len(bench_players))
-            for i, (player, pos) in enumerate(bench_players):
-                with bench_cols[i]:
-                    pos_emoji = {'GK': '🥅', 'DEF': '🛡️', 'MID': '⚡', 'FWD': '🎯'}[pos]
-                    st.write(f"**{player['web_name']}** {pos_emoji}")
-                    st.write(f"{player['team']} • £{player['price']:.1f}m")
-                    st.caption("Lavička")
-        
-        # Kapitán doporučení
-        st.subheader("👑 Kapitán & Vice-kapitán")
-        
-        # Najdi nejlepší kapitány ze starting XI
-        starting_players_list = []
-        for pos_players in optimal_xi.values():
-            starting_players_list.extend(pos_players)
-        
-        captain_candidates = sorted(starting_players_list, key=lambda x: x['predicted_points'], reverse=True)[:3]
-        
-        col1, col2, col3 = st.columns(3)
-        roles = ["👑 Kapitán", "🔸 Vice-kapitán", "🔹 3. volba"]
-        colors = ["gold", "silver", "bronze"]
-        
-        for i, candidate in enumerate(captain_candidates):
-            with [col1, col2, col3][i]:
-                st.write(f"**{roles[i]}**")
-                st.write(f"**{candidate['web_name']}**")
-                st.write(f"{candidate['team']} • £{candidate['price']:.1f}m")
-                st.write(f"**Predikce (C): {candidate['predicted_points']*2:.1f} bodů**")
-                
-                # Reason for captaincy
-                if i == 0:
-                    st.success("Nejvyšší predikce + forma")
-                elif i == 1:
-                    st.info("Backup v případě rotace")
-                else:
-                    st.warning("Differential pick")
-        
-        # Transfer strategie pro 4 GW
-        st.subheader("🔄 Transfer plán na 4 gameweeks (FPL pravidla)")
-        
-        strategies = create_transfer_strategy(current_gw, ai_team, fixtures_df)
-        
-        for i, strategy in enumerate(strategies):
-            with st.expander(f"GW{strategy['gw']}: {strategy['title']} {strategy['risk']}", expanded=(i==0)):
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.write(f"**🔄 Transfery:** {strategy['transfers']}")
-                    st.write(f"**👑 Kapitán:** {strategy['captain_logic']}")
-                    st.write(f"**🎯 Zaměření:** {strategy['focus']}")
-                
-                with col2:
-                    st.write(f"**💎 Chipy:** {strategy['chips']}")
-                    st.write(f"**⚠️ Riziko:** {strategy['risk']}")
-                
-                st.write("**📋 Stratimport streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -339,25 +175,6 @@ def get_current_gameweek(fpl_data):
     
     return current_gw
 
-def get_position_color(position):
-    colors = {
-        'Goalkeeper': '#eab308',
-        'Defender': '#3b82f6', 
-        'Midfielder': '#22c55e',
-        'Forward': '#ef4444'
-    }
-    return colors.get(position, '#6b7280')
-
-def get_difficulty_color(difficulty):
-    if difficulty <= 2:
-        return '#22c55e'
-    elif difficulty == 3:
-        return '#eab308'
-    elif difficulty == 4:
-        return '#f97316'
-    else:
-        return '#ef4444'
-
 def create_ai_team(players_df, fixtures_df, current_gw, budget=100.0):
     """Vytvoří AI doporučený tým podle oficiálních FPL pravidel 2025/26"""
     
@@ -527,6 +344,29 @@ def get_optimal_formation(team):
     
     return formation
 
+def get_player_next_fixtures(player_team, fixtures_df, current_gw, count=4):
+    """Získá následující fixtures pro hráče"""
+    team_fixtures = fixtures_df[
+        ((fixtures_df['home_team'] == player_team) | (fixtures_df['away_team'] == player_team)) &
+        (fixtures_df['gameweek'] >= current_gw) &
+        (fixtures_df['gameweek'] <= current_gw + count - 1)
+    ].sort_values('gameweek')
+    
+    fixtures_info = []
+    for _, fixture in team_fixtures.iterrows():
+        is_home = fixture['home_team'] == player_team
+        opponent = fixture['away_team'] if is_home else fixture['home_team']
+        difficulty = fixture['home_difficulty'] if is_home else fixture['away_difficulty']
+        
+        fixtures_info.append({
+            'gw': fixture['gameweek'],
+            'opponent': opponent[:3].upper(),
+            'is_home': is_home,
+            'difficulty': difficulty
+        })
+    
+    return fixtures_info
+
 def create_transfer_strategy(current_gw, team, fixtures_df):
     """Vytvoří transfer strategii pro následující gameweeks"""
     
@@ -601,32 +441,28 @@ def create_transfer_strategy(current_gw, team, fixtures_df):
     
     return strategies
 
-def get_player_next_fixtures(player_team, fixtures_df, current_gw, count=4):
-    """Získá následující fixtures pro hráče"""
-    team_fixtures = fixtures_df[
-        ((fixtures_df['home_team'] == player_team) | (fixtures_df['away_team'] == player_team)) &
-        (fixtures_df['gameweek'] >= current_gw) &
-        (fixtures_df['gameweek'] <= current_gw + count - 1)
-    ].sort_values('gameweek')
-    
-    fixtures_info = []
-    for _, fixture in team_fixtures.iterrows():
-        is_home = fixture['home_team'] == player_team
-        opponent = fixture['away_team'] if is_home else fixture['home_team']
-        difficulty = fixture['home_difficulty'] if is_home else fixture['away_difficulty']
-        
-        fixtures_info.append({
-            'gw': fixture['gameweek'],
-            'opponent': opponent[:3].upper(),
-            'is_home': is_home,
-            'difficulty': difficulty
-        })
-    
-    return fixtures_info
+def get_position_color(position):
+    colors = {
+        'Goalkeeper': '#eab308',
+        'Defender': '#3b82f6', 
+        'Midfielder': '#22c55e',
+        'Forward': '#ef4444'
+    }
+    return colors.get(position, '#6b7280')
 
-def create_gameweek_strategy(current_gw):
-    """Vytvoří strategii podle oficiálních FPL pravidel 2025/26"""
-    return create_transfer_strategy(current_gw, {}, pd.DataFrame())
+def get_difficulty_color(difficulty):
+    if difficulty <= 2:
+        return '#22c55e'
+    elif difficulty == 3:
+        return '#eab308'
+    elif difficulty == 4:
+        return '#f97316'
+    else:
+        return '#ef4444'
+
+def format_price(price):
+    """Formátuje cenu hráče"""
+    return f"£{price:.1f}m"
 
 def main():
     # Header s live indikátorem
@@ -792,171 +628,267 @@ def main():
 
     # Tab: AI Doporučený tým
     elif selected_tab == "AI Doporučený tým":
-        st.header("🤖 AI Doporučený tým pro sezónu 2025/26")
-        st.markdown("AI vytvořilo optimální tým na základě predikce, formy, ceny a diferenciálu")
+        st.header("🤖 AI Doporučený tým - FPL pravidla 2025/26")
+        st.markdown("**Oficiální pravidla:** £100m budget • 15 hráčů (2-5-5-3) • Max 3 z týmu • Starting XI respektuje FPL formaci")
         
-        # Vytvoření AI týmu
+        # Vytvoření AI týmu podle pravidel
         ai_team, total_cost = create_ai_team(players_df, fixtures_df, current_gw)
         
-        # Info o týmu
+        # Kontrola pravidel
+        team_summary = {
+            'GK': len(ai_team.get('GK', [])),
+            'DEF': len(ai_team.get('DEF', [])), 
+            'MID': len(ai_team.get('MID', [])),
+            'FWD': len(ai_team.get('FWD', []))
+        }
+        
+        total_players = sum(team_summary.values())
         remaining_budget = 100.0 - total_cost
-        col1, col2, col3 = st.columns(3)
+        
+        # Status check
+        if total_players == 15 and remaining_budget >= 0:
+            status_color = "success"
+            status_text = f"✅ Tým splňuje FPL pravidla!"
+        else:
+            status_color = "error" 
+            status_text = f"⚠️ Problém s týmem: {total_players}/15 hráčů"
+        
+        # Info metriky
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("💰 Celkový rozpočet", f"£{total_cost:.1f}m")
+            st.metric("💰 Rozpočet", f"£{total_cost:.1f}m")
         with col2:
-            st.metric("💸 Zbývá", f"£{remaining_budget:.1f}m")
+            st.metric("💸 Zbývá", f"£{remaining_budget:.1f}m") 
         with col3:
-            st.metric("⚽ Formace", "3-5-2")
+            st.metric("👥 Hráči", f"{total_players}/15")
+        with col4:
+            st.metric("⚽ Formace", f"{team_summary['DEF']}-{team_summary['MID']}-{team_summary['FWD']}")
         
-        st.success("✅ Tým je připravený! Balanced rozpočet s kvalitními hráči.")
+        if status_color == "success":
+            st.success(status_text)
+        else:
+            st.error(status_text)
         
-        # Zobrazení hráčů podle pozic
-        positions_config = [
-            ('🥅 Brankáři', ai_team.get('GK', []), 1, 1),  # (název, hráči, main, bench)
-            ('🛡️ Obránci', ai_team.get('DEF', []), 3, 2),
-            ('⚡ Záložníci', ai_team.get('MID', []), 5, 0),
-            ('🎯 Útočníci', ai_team.get('FWD', []), 2, 1)
+        # FPL pravidla reminder
+        st.info("📋 **FPL 2025/26 Novinky:** 2x všechny chipy • Obránci body za 10 CBIT • GW16 bonus 5 FT (AFCON) • Defensive contributions")
+        
+        # Optimální starting XI podle FPL pravidel
+        optimal_xi = get_optimal_formation(ai_team)
+        
+        st.subheader("🏟️ Starting XI (Optimální formace)")
+        st.markdown("*Vybráno podle AI skóre s respektováním FPL minimálních požadavků*")
+        
+        # Zobrazení starting XI
+        xi_positions = [
+            ('🥅 Brankář', optimal_xi.get('GK', [])),
+            ('🛡️ Obránci', optimal_xi.get('DEF', [])),
+            ('⚡ Záložníci', optimal_xi.get('MID', [])),
+            ('🎯 Útočníci', optimal_xi.get('FWD', []))
         ]
         
-        for pos_name, players, main_count, bench_count in positions_config:
+        for pos_name, players in xi_positions:
             if players:
-                st.subheader(pos_name)
+                st.write(f"**{pos_name} ({len(players)})**")
                 
-                main_players = players[:main_count]
-                bench_players = players[main_count:main_count+bench_count]
+                if len(players) <= 4:
+                    cols = st.columns(len(players))
+                else:
+                    # Pro 5 záložníků - rozdělení
+                    cols = st.columns(3) + st.columns(2) if len(players) == 5 else st.columns(len(players))
                 
-                # Hlavní sestava
-                if main_players:
-                    st.write("**Hlavní sestava:**")
-                    
-                    if len(main_players) <= 3:
-                        cols = st.columns(len(main_players))
-                    else:
-                        # Pro 5 záložníků rozdělit na 2 řády
-                        cols = st.columns(3) + st.columns(2) if len(main_players) == 5 else st.columns(len(main_players))
-                    
-                    for i, player in enumerate(main_players):
-                        col_index = i if len(main_players) <= 3 else (i if i < 3 else i - 3)
-                        with cols[col_index]:
-                            # Fixtures preview
-                            fixtures = get_player_next_fixtures(player['team'], fixtures_df, current_gw, 4)
-                            
-                            # Player card
-                            with st.container():
-                                st.write(f"**{player['web_name']}**")
-                                st.write(f"{player['team']} • £{player['price']:.1f}m")
-                                st.write(f"Predikce: {player['predicted_points']:.1f} | Forma: {player['form']:.1f}")
-                                
-                                # Fixtures
-                                if fixtures:
-                                    fixture_text = ""
-                                    for fix in fixtures[:4]:
-                                        home_away = "🏠" if fix['is_home'] else "✈️"
-                                        difficulty_emoji = "🟢" if fix['difficulty'] <= 2 else "🟡" if fix['difficulty'] == 3 else "🔴"
-                                        fixture_text += f"GW{fix['gw']}: {fix['opponent']} {home_away} {difficulty_emoji}  \n"
-                                    st.write(fixture_text)
-                
-                # Lavička
-                if bench_players:
-                    st.write("**Lavička:**")
-                    bench_cols = st.columns(len(bench_players))
-                    for i, player in enumerate(bench_players):
-                        with bench_cols[i]:
-                            st.write(f"**{player['web_name']}** (Lavička)")
-                            st.write(f"{player['team']} • £{player['price']:.1f}m")
-                
+                for i, player in enumerate(players):
+                    col_index = i if len(players) <= 4 else (i if i < 3 else i - 3)
+                    with cols[col_index]:
+                        # Fixtures preview
+                        fixtures = get_player_next_fixtures(player['team'], fixtures_df, current_gw, 4)
+                        
+                        st.write(f"**{player['web_name']}** ⭐")
+                        st.write(f"{player['team']} • £{player['price']:.1f}m")
+                        st.write(f"AI skóre: {player['ai_score']:.1f}")
+                        
+                        # Fixtures s obtížností
+                        if fixtures:
+                            fixture_text = "**Fixtures:** "
+                            for fix in fixtures[:3]:  # Prvních 3
+                                home_away = "🏠" if fix['is_home'] else "✈️"  
+                                difficulty_emoji = "🟢" if fix['difficulty'] <= 2 else "🟡" if fix['difficulty'] == 3 else "🔴"
+                                fixture_text += f"GW{fix['gw']}: {fix['opponent']} {home_away}{difficulty_emoji} "
+                            st.write(fixture_text)
                 st.divider()
         
+        # Lavička (zbývající hráči)
+        st.subheader("🪑 Lavička")
+        
+        bench_players = []
+        starting_players = set()
+        
+        # Vytvoř set starting hráčů
+        for pos_players in optimal_xi.values():
+            for player in pos_players:
+                starting_players.add(player['id'])
+        
+        # Najdi hráče na lavičce
+        for pos in ['GK', 'DEF', 'MID', 'FWD']:
+            for player in ai_team.get(pos, []):
+                if player['id'] not in starting_players:
+                    bench_players.append((player, pos))
+        
+        if bench_players:
+            bench_cols = st.columns(len(bench_players))
+            for i, (player, pos) in enumerate(bench_players):
+                with bench_cols[i]:
+                    pos_emoji = {'GK': '🥅', 'DEF': '🛡️', 'MID': '⚡', 'FWD': '🎯'}[pos]
+                    st.write(f"**{player['web_name']}** {pos_emoji}")
+                    st.write(f"{player['team']} • £{player['price']:.1f}m")
+                    st.caption("Lavička")
+        
         # Kapitán doporučení
-        st.subheader("👑 Kapitán doporučení")
+        st.subheader("👑 Kapitán & Vice-kapitán")
         
-        # Najdi nejlepší kapitánské volby
-        all_players = []
-        for pos_players in ai_team.values():
-            all_players.extend(pos_players)
+        # Najdi nejlepší kapitány ze starting XI
+        starting_players_list = []
+        for pos_players in optimal_xi.values():
+            starting_players_list.extend(pos_players)
         
-        captain_candidates = sorted(all_players, key=lambda x: x['predicted_points'], reverse=True)[:3]
+        captain_candidates = sorted(starting_players_list, key=lambda x: x['predicted_points'], reverse=True)[:3]
         
         col1, col2, col3 = st.columns(3)
-        risk_levels = ["🟢 Bezpečný", "🟡 Střední", "🔴 Risky"]
+        roles = ["👑 Kapitán", "🔸 Vice-kapitán", "🔹 3. volba"]
         
         for i, candidate in enumerate(captain_candidates):
             with [col1, col2, col3][i]:
-                st.write(f"**👑 {candidate['web_name']}**")
+                st.write(f"**{roles[i]}**")
+                st.write(f"**{candidate['web_name']}**")
                 st.write(f"{candidate['team']} • £{candidate['price']:.1f}m")
                 st.write(f"**Predikce (C): {candidate['predicted_points']*2:.1f} bodů**")
-                st.write(f"Riziko: {risk_levels[i]}")
+                
+                # Reason for captaincy
+                if i == 0:
+                    st.success("Nejvyšší predikce + forma")
+                elif i == 1:
+                    st.info("Backup v případě rotace")
+                else:
+                    st.warning("Differential pick")
         
-        # Strategie pro následující 4 GW
-        st.subheader("📋 AI Strategie pro následující 4 Gameweeks")
+        # Transfer strategie pro 4 GW
+        st.subheader("🔄 Transfer plán na 4 gameweeks (FPL pravidla)")
         
-        strategies = create_gameweek_strategy(current_gw)
+        strategies = create_transfer_strategy(current_gw, ai_team, fixtures_df)
         
-        for strategy in strategies:
-            with st.expander(f"GW{strategy['gw']}: {strategy['title']} {strategy['risk_level']}"):
+        for i, strategy in enumerate(strategies):
+            with st.expander(f"GW{strategy['gw']}: {strategy['title']} {strategy['risk']}", expanded=(i==0)):
+                
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.write(f"**👑 Kapitán:** {strategy['captain']}")
                     st.write(f"**🔄 Transfery:** {strategy['transfers']}")
+                    st.write(f"**👑 Kapitán:** {strategy['captain_logic']}")
+                    st.write(f"**🎯 Zaměření:** {strategy['focus']}")
                 
                 with col2:
-                    st.write(f"**🎯 Zaměření:** {strategy['focus']}")
-                    st.write(f"**Riziko:** {strategy['risk_level']}")
+                    st.write(f"**💎 Chipy:** {strategy['chips']}")
+                    st.write(f"**⚠️ Riziko:** {strategy['risk']}")
                 
-                st.write(f"**Strategie:** {strategy['strategy']}")
+                st.write("**📋 Strategie:**")
+                st.write(strategy['strategy'])
+                
+                if 'key_moves' in strategy:
+                    st.write("**🎯 Klíčové kroky:**")
+                    for move in strategy['key_moves']:
+                        st.write(f"• {move}")
         
-        # Key insights
-        st.subheader("💡 Klíčové poznatky AI strategie")
+        # FPL pravidla a čipy pro 2025/26
+        st.subheader("💎 Chip strategie - Nová pravidla 2025/26")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.success("**✅ Výhody tohoto týmu**")
-            st.write("""
-            • Balanced rozpočet - žádné risiko  
-            • Mix premium + differential hráčů  
-            • Dobré fixtures pro prvních 4 GW  
-            • Flexibility pro rotace  
-            • Silná lavička pro emergency
-            """)
-        
+            st.markdown("**🔥 První polovina sezóny (GW1-19):**")
+            st.write("• **Wildcard 1:** GW4-8 (pokud potřebuješ major changes)")
+            st.write("• **Bench Boost:** GW2-3 (když máš silnou lavičku)")  
+            st.write("• **Triple Captain:** vs nováčci (GW1-5)")
+            st.write("• **Free Hit:** proti bad fixtures (GW6-10)")
+            
         with col2:
-            st.error("**⚠️ Rizika a pozornost**")
-            st.write("""
-            • Sleduj injury news před GW  
-            • Rotation risk u některých hráčů  
-            • Fixture swing od GW3  
-            • Nová sezóna = nepředvídatelnost  
-            • Transfer trendy můžou ovlivnit ceny
-            """)
+            st.markdown("**❄️ Druhá polovina sezóny (GW20-38):**")
+            st.write("• **Wildcard 2:** GW20-25 (po AFCON chaos)")
+            st.write("• **Bench Boost:** Double gameweek (GW28-32)")
+            st.write("• **Triple Captain:** DGW premium (GW30-35)")
+            st.write("• **Free Hit:** Blank gameweek (GW25-30)")
+        
+        # AFCON warning
+        st.warning("🚨 **AFCON Alert:** GW16 = 5 Free Transfers! Salah, Mbeumo, Sarr a další odjedou 21.12.-18.1.")
         
         # Team value breakdown
-        st.subheader("💰 Rozpis rozpočtu")
+        st.subheader("💰 Analýza rozpočtu podle FPL pozic")
         
         if ai_team:
-            position_costs = {
-                'Brankáři': sum(p['price'] for p in ai_team.get('GK', [])),
-                'Obránci': sum(p['price'] for p in ai_team.get('DEF', [])),
-                'Záložníci': sum(p['price'] for p in ai_team.get('MID', [])),
-                'Útočníci': sum(p['price'] for p in ai_team.get('FWD', []))
-            }
+            position_costs = {}
+            position_counts = {}
             
-            cost_df = pd.DataFrame(list(position_costs.items()), columns=['Pozice', 'Cena'])
+            for pos, players in ai_team.items():
+                if players:
+                    pos_names = {'GK': 'Brankáři', 'DEF': 'Obránci', 'MID': 'Záložníci', 'FWD': 'Útočníci'}
+                    pos_name = pos_names[pos]
+                    position_costs[pos_name] = sum(p['price'] for p in players)
+                    position_counts[pos_name] = len(players)
             
-            fig = px.pie(
-                cost_df,
-                values='Cena',
-                names='Pozice',
-                title="Rozdělení rozpočtu podle pozic",
-                color_discrete_sequence=['#eab308', '#3b82f6', '#22c55e', '#ef4444']
-            )
-            fig.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='white')
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # Pie chart
+            if position_costs:
+                cost_df = pd.DataFrame([
+                    {'Pozice': k, 'Cena': v, 'Počet': position_counts[k]} 
+                    for k, v in position_costs.items()
+                ])
+                
+                fig = px.pie(
+                    cost_df,
+                    values='Cena',
+                    names='Pozice', 
+                    title="Rozdělení £100m rozpočtu podle pozic",
+                    color_discrete_sequence=['#eab308', '#3b82f6', '#22c55e', '#ef4444'],
+                    hover_data=['Počet']
+                )
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white')
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Tabulka s detaily
+                cost_df['Průměr na hráče'] = cost_df['Cena'] / cost_df['Počet']
+                cost_df['Cena'] = cost_df['Cena'].round(1)
+                cost_df['Průměr na hráče'] = cost_df['Průměr na hráče'].round(1)
+                
+                st.dataframe(cost_df, use_container_width=True)
+        
+        # FPL pravidla reminder
+        st.subheader("📋 Připomenutí FPL pravidel 2025/26")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.success("**✅ Základní pravidla**")
+            st.write("""
+            • £100m budget celkem  
+            • 15 hráčů: 2 GK, 5 DEF, 5 MID, 3 FWD  
+            • Max 3 hráči z jednoho týmu  
+            • Starting XI: min 3 DEF, 2 MID, 1 FWD  
+            • 1 Free Transfer každý GW  
+            • Max 5 FT v bance  
+            """)
+            
+        with col2:
+            st.info("**🆕 Novinky 2025/26**")
+            st.write("""
+            • 2x každý chip v každé půlce  
+            • Defensive contributions body  
+            • Lepší Fantasy assist definice  
+            • GW16: Bonus 5 FT (AFCON)  
+            • Elite global ligy (Top 1% a 10%)  
+            • Adobe AI team badges  
+            """)
 
     # Tab: Top hráči podle ceny
     elif selected_tab == "Top hráči podle ceny":
@@ -1222,3 +1154,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+                    st.
